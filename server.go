@@ -3,17 +3,19 @@ package h2tun
 import (
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"sync"
 	"time"
 
-	"golang.org/x/net/http2"
-
 	"github.com/andrew-d/id"
 	"github.com/koding/logging"
+	"golang.org/x/net/http2"
 )
 
+// TODO mma add ListenerFunc func(net.Listener) net.Listener to allow for tls listener decoration
+// TODO mma add dynamic allowed clients modifications
 type Server struct {
 	allowedClients []*AllowedClient
 	listener       net.Listener
@@ -22,12 +24,15 @@ type Server struct {
 	hostConn   map[string]net.Conn
 	hostConnMu sync.RWMutex
 
+	tcpPorts map[int]*AllowedClient
+
 	log logging.Logger
 }
 
 type AllowedClient struct {
-	ID   id.ID
-	Host string
+	ID        id.ID
+	Host      string
+	Listeners []net.Listener
 }
 
 func NewServer(tlsConfig *tls.Config, allowedClients []*AllowedClient) (*Server, error) {
@@ -43,16 +48,13 @@ func NewServer(tlsConfig *tls.Config, allowedClients []*AllowedClient) (*Server,
 	}
 	s.initHTTPClient()
 
-	go s.listenControl()
-
 	return s, nil
 }
 
 func (s *Server) initHTTPClient() {
+	// TODO mma try using connection pool for transport
 	s.hostConn = make(map[string]net.Conn)
-
 	s.httpClient = &http.Client{
-		// TODO mma try using connection pool for transport
 		Transport: &http2.Transport{
 			DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
 				s.hostConnMu.RLock()
@@ -66,6 +68,11 @@ func (s *Server) initHTTPClient() {
 			},
 		},
 	}
+}
+
+func (s *Server) Start() {
+	go s.listenControl()
+	s.listenClientListeners()
 }
 
 func (s *Server) listenControl() {
@@ -82,70 +89,84 @@ func (s *Server) listenControl() {
 func (s *Server) handleClient(conn net.Conn) {
 	s.log.Info("New client %s", conn.RemoteAddr().String())
 
+	var (
+		client *AllowedClient
+		req    *http.Request
+		resp   *http.Response
+		err    error
+		ok     bool
+	)
+
 	id, err := peerID(conn.(*tls.Conn))
 	if err != nil {
 		s.log.Warning("Certificate error: %s", err)
-		conn.Close()
-		return
+		goto cleanup
 	}
-	client, ok := s.checkID(id)
+
+	client, ok = s.checkID(id)
 	if !ok {
 		s.log.Warning("Unknown certificate: %q", id.String())
-		conn.Close()
-		return
+		goto cleanup
 	}
 
-	req, err := http.NewRequest(http.MethodConnect, fmt.Sprintf("https://%s", client.Host), nil)
+	req, err = http.NewRequest(http.MethodConnect, url(client, ""), nil)
 	if err != nil {
 		s.log.Error("Invalid host %q for client %q", client.Host, client.ID)
-		conn.Close()
-		return
+		goto cleanup
 	}
 
-	if err := conn.SetDeadline(time.Time{}); err != nil {
+	if err = conn.SetDeadline(time.Time{}); err != nil {
 		s.log.Warning("Setting no deadline failed: %s", err)
+		// recoverable
 	}
 
-	s.addHostConn(client, conn)
+	if err := s.addHostConn(client, conn); err != nil {
+		s.log.Warning("Could not add host: %s", err)
+		goto cleanup
+	}
 
-	resp, err := s.httpClient.Do(req)
+	resp, err = s.httpClient.Do(req)
 	if err != nil {
 		s.log.Warning("Handshake failed %s", err)
-		conn.Close()
-		s.deleteHostConn(client.Host)
-		return
+		goto cleanup
 	}
 	if resp.StatusCode != http.StatusOK {
 		s.log.Warning("Handshake failed")
-		conn.Close()
+		goto cleanup
+	}
+
+	return
+
+cleanup:
+	conn.Close()
+	if client != nil {
 		s.deleteHostConn(client.Host)
-		return
 	}
 }
 
-func (s *Server) addHostConn(client *AllowedClient, conn net.Conn) {
+func (s *Server) addHostConn(client *AllowedClient, conn net.Conn) error {
 	key := hostPort(client.Host)
 
 	s.hostConnMu.Lock()
-	oldConn := s.hostConn[key]
-	if oldConn != nil {
-		s.log.Info("Closing old connection for host &q, old was from %s, new is from %s",
-			client.Host, oldConn.RemoteAddr().String(), conn.RemoteAddr().String())
-		oldConn.Close()
+	defer s.hostConnMu.Unlock()
+
+	if c, ok := s.hostConn[key]; ok {
+		return fmt.Errorf("client %q already connected from %q", client.ID, c.RemoteAddr().String())
 	}
+
 	s.hostConn[key] = conn
-	s.hostConnMu.Unlock()
+
+	return nil
 }
 
 func (s *Server) deleteHostConn(host string) {
-	key := hostPort(host)
 	s.hostConnMu.Lock()
-	delete(s.hostConn, key)
+	delete(s.hostConn, hostPort(host))
 	s.hostConnMu.Unlock()
 }
 
 func hostPort(host string) string {
-	// TODO add support for custom ports
+	// TODO mma add support for custom ports
 	return fmt.Sprint(host, ":443")
 }
 
@@ -156,6 +177,70 @@ func (s *Server) checkID(id id.ID) (*AllowedClient, bool) {
 		}
 	}
 	return nil, false
+}
+
+func (s *Server) listenClientListeners() {
+	for _, client := range s.allowedClients {
+		if client.Listeners == nil {
+			continue
+		}
+
+		for _, l := range client.Listeners {
+			go s.listen(l, client)
+		}
+	}
+}
+
+func (s *Server) listen(l net.Listener, client *AllowedClient) {
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			s.log.Warning("Accept failed: %s", err)
+			continue
+		}
+		s.log.Debug("Accepted connection from %q", conn.RemoteAddr().String())
+
+		// TODO mma get Protocol from Network
+		// TODO mma get LocalIP from Addr
+		msg := &ControlMessage{
+			Action:   RequestClientSession,
+			Protocol: RAW,
+		}
+
+		go s.proxy(conn, client, msg)
+	}
+}
+
+func (s *Server) proxy(conn net.Conn, client *AllowedClient, msg *ControlMessage) {
+	defer conn.Close()
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+	defer pw.Close()
+
+	req, err := http.NewRequest(http.MethodPut, url(client, ""), pr)
+	if err != nil {
+		s.log.Error("Request creation failed: %s", err)
+		return
+	}
+
+	// read from caller, write to tunnel client
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		transfer("local to remote", pw, conn, s.log)
+		wg.Done()
+	}()
+
+	// read from tunnel client, write to caller
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		s.log.Error("Proxing conn from %q to %q failed: %s", conn.RemoteAddr().String(), client.Host, err)
+		return
+	}
+	transfer("remote to local", conn, resp.Body, s.log)
+
+	wg.Wait()
 }
 
 func (s *Server) Addr() net.Addr {

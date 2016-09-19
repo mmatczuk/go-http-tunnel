@@ -3,9 +3,11 @@ package h2tun
 import (
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 
+	"github.com/koding/logging"
 	"golang.org/x/net/http2"
 )
 
@@ -14,6 +16,7 @@ type Client struct {
 	tlsConfig  *tls.Config
 	conn       net.Conn
 	httpServer *http2.Server
+	log        logging.Logger
 }
 
 func NewClient(serverAddr string, tlsConfig *tls.Config) *Client {
@@ -21,6 +24,7 @@ func NewClient(serverAddr string, tlsConfig *tls.Config) *Client {
 		serverAddr: serverAddr,
 		tlsConfig:  tlsConfig,
 		httpServer: &http2.Server{},
+		log:        logging.NewLogger("client"),
 	}
 }
 
@@ -38,9 +42,25 @@ func (c *Client) Connect() error {
 	return nil
 }
 
+type flushWriter struct {
+	w io.Writer
+}
+
+func (fw flushWriter) Write(p []byte) (n int, err error) {
+	n, err = fw.w.Write(p)
+	if f, ok := fw.w.(http.Flusher); ok {
+		f.Flush()
+	}
+	return
+}
+
 func (c *Client) proxy(w http.ResponseWriter, r *http.Request) {
-	fmt.Print(r.URL)
-	http.Error(w, "OK", http.StatusOK)
+	c.log.Info("New proxy request")
+	if r.Method == http.MethodConnect {
+		http.Error(w, "OK", http.StatusOK)
+	} else {
+		io.Copy(flushWriter{w}, r.Body)
+	}
 }
 
 func (c *Client) Close() error {
