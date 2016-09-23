@@ -7,11 +7,13 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/koding/h2tun/proto"
 	"github.com/koding/logging"
 	"golang.org/x/net/http2"
 )
 
 type Client struct {
+	proxy      ProxyFunc
 	serverAddr string
 	tlsConfig  *tls.Config
 	conn       net.Conn
@@ -19,8 +21,9 @@ type Client struct {
 	log        logging.Logger
 }
 
-func NewClient(serverAddr string, tlsConfig *tls.Config) *Client {
+func NewClient(proxy ProxyFunc, serverAddr string, tlsConfig *tls.Config) *Client {
 	return &Client{
+		proxy:      proxy,
 		serverAddr: serverAddr,
 		tlsConfig:  tlsConfig,
 		httpServer: &http2.Server{},
@@ -36,10 +39,27 @@ func (c *Client) Connect() error {
 	c.conn = conn
 
 	c.httpServer.ServeConn(conn, &http2.ServeConnOpts{
-		Handler: http.HandlerFunc(c.proxy),
+		Handler: http.HandlerFunc(c.serveHTTP),
 	})
 
 	return nil
+}
+
+func (c *Client) serveHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodConnect {
+		c.log.Info("Handshake: hello from server")
+		http.Error(w, "Nice to see you", http.StatusOK)
+		return
+	}
+
+	msg, err := proto.ParseControlMessage(r.Header)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	c.log.Debug("Proxy init %s %v", r.RemoteAddr, msg)
+	c.proxy(flushWriter{w}, r.Body, msg)
+	c.log.Debug("Proxy over %s %v", r.RemoteAddr, msg)
 }
 
 type flushWriter struct {
@@ -52,15 +72,6 @@ func (fw flushWriter) Write(p []byte) (n int, err error) {
 		f.Flush()
 	}
 	return
-}
-
-func (c *Client) proxy(w http.ResponseWriter, r *http.Request) {
-	c.log.Info("New proxy request")
-	if r.Method == http.MethodConnect {
-		http.Error(w, "OK", http.StatusOK)
-	} else {
-		io.Copy(flushWriter{w}, r.Body)
-	}
 }
 
 func (c *Client) Close() error {

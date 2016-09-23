@@ -1,22 +1,29 @@
 package h2tun_test
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/andrew-d/id"
 	"github.com/koding/h2tun"
+	"github.com/koding/h2tun/proto"
 	"github.com/koding/logging"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestHTTP(t *testing.T) {
+func TestTCP(t *testing.T) {
 	logging.DefaultLevel = logging.DEBUG
 	logging.DefaultHandler.SetLevel(logging.DEBUG)
 
@@ -42,7 +49,7 @@ func TestHTTP(t *testing.T) {
 	server.Start()
 	defer server.Close()
 
-	client := h2tun.NewClient(server.Addr().String(), tlsConfig(cert))
+	client := h2tun.NewClient(echoProxyFunc, server.Addr().String(), tlsConfig(cert))
 	go client.Connect()
 	defer client.Close()
 
@@ -71,6 +78,80 @@ func TestHTTP(t *testing.T) {
 		wg.Done()
 	}()
 	wg.Wait()
+}
+
+func echoProxyFunc(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage) {
+	io.Copy(w, r)
+}
+
+func TestHTTP(t *testing.T) {
+	logging.DefaultLevel = logging.DEBUG
+	logging.DefaultHandler.SetLevel(logging.DEBUG)
+
+	cert, err := loadTestCert()
+	assert.Nil(t, err)
+	clientID := idFromTLSCert(cert)
+
+	server, err := h2tun.NewServer(
+		tlsConfig(cert),
+		[]*h2tun.AllowedClient{
+			{
+				ID:   clientID,
+				Host: "foobar.com",
+			},
+		},
+	)
+	assert.Nil(t, err)
+	server.Start()
+	defer server.Close()
+
+	client := h2tun.NewClient(echoHTTPProxyFunc, server.Addr().String(), tlsConfig(cert))
+	go client.Connect()
+	defer client.Close()
+
+	time.Sleep(time.Second)
+
+	s := httptest.NewServer(server)
+	defer s.Close()
+
+	const testPayload = "this is a test"
+
+	_, port, _ := net.SplitHostPort(s.Listener.Addr().String())
+	r, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://foobar.com:%s/some/path", port), strings.NewReader(testPayload))
+	assert.Nil(t, err)
+
+	resp, err := http.DefaultClient.Do(r)
+	assert.Nil(t, err)
+	body, err := ioutil.ReadAll(resp.Body)
+	assert.Equal(t, testPayload, string(body))
+}
+
+func echoHTTPProxyFunc(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage) {
+	req, err := http.ReadRequest(bufio.NewReader(r))
+	if err != nil {
+		panic(err)
+	}
+
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		panic(err)
+	}
+
+	headers := make(http.Header)
+	headers.Set("Content-Type", "text/plain")
+
+	resp := &http.Response{
+		Status:        "200 OK",
+		StatusCode:    200,
+		Proto:         "HTTP/1.0",
+		ProtoMajor:    1,
+		ProtoMinor:    0,
+		Request:       req,
+		Header:        headers,
+		ContentLength: int64(len(body)),
+		Body:          ioutil.NopCloser(bytes.NewReader(body)),
+	}
+	resp.Write(w)
 }
 
 func loadTestCert() (tls.Certificate, error) {

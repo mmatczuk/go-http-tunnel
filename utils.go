@@ -3,12 +3,13 @@ package h2tun
 import (
 	"fmt"
 	"io"
+	"net/http"
 
 	"github.com/koding/logging"
 )
 
-func url(client *AllowedClient, path string) string {
-	return fmt.Sprint("https://", client.Host, path)
+func url(host string) string {
+	return fmt.Sprint("https://", host)
 }
 
 type closeWriter interface {
@@ -19,7 +20,7 @@ type closeReader interface {
 }
 
 func transfer(side string, dst io.Writer, src io.ReadCloser, log logging.Logger) {
-	log.Debug("proxing")
+	log.Debug("proxing %s", side)
 
 	n, err := io.Copy(dst, src)
 	if err != nil {
@@ -36,5 +37,13 @@ func transfer(side string, dst io.Writer, src io.ReadCloser, log logging.Logger)
 		src.Close()
 	}
 
-	log.Debug("done proxing %d bytes", n)
+	log.Debug("done proxing %s %d bytes", side, n)
+}
+
+func copyHeader(dst, src http.Header) {
+	for k, v := range src {
+		vv := make([]string, len(v))
+		copy(vv, v)
+		dst[k] = vv
+	}
 }

@@ -1,6 +1,7 @@
 package h2tun
 
 import (
+	"bufio"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -10,21 +11,25 @@ import (
 	"time"
 
 	"github.com/andrew-d/id"
+	"github.com/koding/h2tun/proto"
 	"github.com/koding/logging"
 	"golang.org/x/net/http2"
 )
 
+// TODO mma introduce config object
 // TODO mma add ListenerFunc func(net.Listener) net.Listener to allow for tls listener decoration
-// TODO mma add dynamic allowed clients modifications
+// TODO mma document
+//
+// TODO (phase2) mma add dynamic allowed clients modifications
+
 type Server struct {
 	allowedClients []*AllowedClient
-	listener       net.Listener
+
+	listener net.Listener
 
 	httpClient *http.Client
 	hostConn   map[string]net.Conn
 	hostConnMu sync.RWMutex
-
-	tcpPorts map[int]*AllowedClient
 
 	log logging.Logger
 }
@@ -100,19 +105,19 @@ func (s *Server) handleClient(conn net.Conn) {
 	id, err := peerID(conn.(*tls.Conn))
 	if err != nil {
 		s.log.Warning("Certificate error: %s", err)
-		goto cleanup
+		goto reject
 	}
 
 	client, ok = s.checkID(id)
 	if !ok {
 		s.log.Warning("Unknown certificate: %q", id.String())
-		goto cleanup
+		goto reject
 	}
 
-	req, err = http.NewRequest(http.MethodConnect, url(client, ""), nil)
+	req, err = http.NewRequest(http.MethodConnect, url(client.Host), nil)
 	if err != nil {
 		s.log.Error("Invalid host %q for client %q", client.Host, client.ID)
-		goto cleanup
+		goto reject
 	}
 
 	if err = conn.SetDeadline(time.Time{}); err != nil {
@@ -122,26 +127,35 @@ func (s *Server) handleClient(conn net.Conn) {
 
 	if err := s.addHostConn(client, conn); err != nil {
 		s.log.Warning("Could not add host: %s", err)
-		goto cleanup
+		goto reject
 	}
 
 	resp, err = s.httpClient.Do(req)
 	if err != nil {
 		s.log.Warning("Handshake failed %s", err)
-		goto cleanup
+		goto reject
 	}
 	if resp.StatusCode != http.StatusOK {
 		s.log.Warning("Handshake failed")
-		goto cleanup
+		goto reject
 	}
 
 	return
 
-cleanup:
+reject:
 	conn.Close()
 	if client != nil {
 		s.deleteHostConn(client.Host)
 	}
+}
+
+func (s *Server) checkID(id id.ID) (*AllowedClient, bool) {
+	for _, c := range s.allowedClients {
+		if id.Equals(c.ID) {
+			return c, true
+		}
+	}
+	return nil, false
 }
 
 func (s *Server) addHostConn(client *AllowedClient, conn net.Conn) error {
@@ -166,17 +180,7 @@ func (s *Server) deleteHostConn(host string) {
 }
 
 func hostPort(host string) string {
-	// TODO mma add support for custom ports
 	return fmt.Sprint(host, ":443")
-}
-
-func (s *Server) checkID(id id.ID) (*AllowedClient, bool) {
-	for _, c := range s.allowedClients {
-		if id.Equals(c.ID) {
-			return c, true
-		}
-	}
-	return nil, false
 }
 
 func (s *Server) listenClientListeners() {
@@ -198,49 +202,96 @@ func (s *Server) listen(l net.Listener, client *AllowedClient) {
 			s.log.Warning("Accept failed: %s", err)
 			continue
 		}
-		s.log.Debug("Accepted connection from %q", conn.RemoteAddr().String())
+		s.log.Debug("Accepted connection from %q", conn.RemoteAddr())
 
-		// TODO mma get Protocol from Network
-		// TODO mma get LocalIP from Addr
-		msg := &ControlMessage{
-			Action:   RequestClientSession,
-			Protocol: RAW,
+		msg := &proto.ControlMessage{
+			Action:       proto.RequestClientSession,
+			Protocol:     l.Addr().Network(),
+			ForwardedFor: conn.RemoteAddr().String(),
+			ForwardedBy:  conn.LocalAddr().String(),
 		}
 
-		go s.proxy(conn, client, msg)
+		go s.proxy(client.Host, conn, conn, msg)
 	}
 }
 
-func (s *Server) proxy(conn net.Conn, client *AllowedClient, msg *ControlMessage) {
-	defer conn.Close()
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	msg := &proto.ControlMessage{
+		Action:       proto.RequestClientSession,
+		Protocol:     proto.HTTPProtocol,
+		ForwardedFor: r.RemoteAddr,
+		ForwardedBy:  r.Host,
+		URLPath:      r.URL.Path,
+	}
+
+	s.proxy(trimPort(r.Host), w, r, msg)
+}
+
+func trimPort(hostPort string) (host string) {
+	host, _, _ = net.SplitHostPort(hostPort)
+	if host == "" {
+		return hostPort
+	}
+	return
+}
+
+func (s *Server) proxy(host string, w io.Writer, r interface{}, msg *proto.ControlMessage) {
+	s.log.Debug("Proxy init %s %v", host, msg)
+
+	defer func() {
+		if c, ok := r.(io.Closer); ok {
+			c.Close()
+		}
+	}()
 
 	pr, pw := io.Pipe()
 	defer pr.Close()
 	defer pw.Close()
 
-	req, err := http.NewRequest(http.MethodPut, url(client, ""), pr)
+	req, err := http.NewRequest(http.MethodPut, url(host), pr)
 	if err != nil {
 		s.log.Error("Request creation failed: %s", err)
 		return
 	}
+	msg.WriteTo(req.Header)
 
-	// read from caller, write to tunnel client
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		transfer("local to remote", pw, conn, s.log)
-		wg.Done()
-	}()
+	var localToRemoteDone = make(chan struct{})
 
-	// read from tunnel client, write to caller
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		s.log.Error("Proxing conn from %q to %q failed: %s", conn.RemoteAddr().String(), client.Host, err)
-		return
+	localToRemote := func() {
+		if hr, ok := r.(*http.Request); ok {
+			hr.Write(pw)
+			pw.Close()
+		} else {
+			transfer("local to remote", pw, r.(io.ReadCloser), s.log)
+		}
+		close(localToRemoteDone)
 	}
-	transfer("remote to local", conn, resp.Body, s.log)
 
-	wg.Wait()
+	remoteToLocal := func() {
+		resp, err := s.httpClient.Do(req)
+		if err != nil {
+			s.log.Error("Proxing conn to client %q failed: %s", host, err)
+			return
+		}
+		if hw, ok := w.(http.ResponseWriter); ok {
+			pr, err := http.ReadResponse(bufio.NewReader(resp.Body), r.(*http.Request))
+			if err != nil {
+				s.log.Error("Reading HTTP response failed: %s", err)
+				return
+			}
+			copyHeader(hw.Header(), pr.Header)
+			hw.WriteHeader(pr.StatusCode)
+			transfer("remote to local", hw, pr.Body, s.log)
+		} else {
+			transfer("remote to local", w, resp.Body, s.log)
+		}
+	}
+
+	go localToRemote()
+	remoteToLocal()
+	<-localToRemoteDone
+
+	s.log.Debug("Proxy over %s %v", host, msg)
 }
 
 func (s *Server) Addr() net.Addr {
