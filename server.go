@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/andrew-d/id"
@@ -45,11 +44,9 @@ type ServerConfig struct {
 type Server struct {
 	config *ServerConfig
 
-	listener net.Listener
-
+	listener   net.Listener
+	connPool   *connPool
 	httpClient *http.Client
-	hostConn   map[string]net.Conn
-	hostConnMu sync.RWMutex
 
 	log logging.Logger
 }
@@ -67,38 +64,22 @@ func NewServer(config *ServerConfig) (*Server, error) {
 		}
 	}
 
+	t := &http2.Transport{}
+	p := newConnPool(t)
+	t.ConnPool = p
+
 	log := logging.NewLogger("server")
 	if config.Log != nil {
 		log = config.Log
 	}
 
-	s := &Server{
-		config:   config,
-		listener: l,
-		log:      log,
-	}
-	s.initHTTPClient()
-
-	return s, nil
-}
-
-func (s *Server) initHTTPClient() {
-	// TODO try using connection pool for transport
-	s.hostConn = make(map[string]net.Conn)
-	s.httpClient = &http.Client{
-		Transport: &http2.Transport{
-			DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
-				s.hostConnMu.RLock()
-				defer s.hostConnMu.RUnlock()
-
-				conn, ok := s.hostConn[addr]
-				if !ok {
-					return nil, fmt.Errorf("no connection for %q", addr)
-				}
-				return conn, nil
-			},
-		},
-	}
+	return &Server{
+		config:     config,
+		listener:   l,
+		connPool:   p,
+		httpClient: &http.Client{Transport: t},
+		log:        log,
+	}, nil
 }
 
 func (s *Server) Start() {
@@ -152,7 +133,7 @@ func (s *Server) handleClient(conn net.Conn) {
 		// recoverable
 	}
 
-	if err := s.addHostConn(client, conn); err != nil {
+	if err := s.connPool.addHostConn(client.Host, conn); err != nil {
 		s.log.Warning("Could not add host: %s", err)
 		goto reject
 	}
@@ -174,7 +155,7 @@ func (s *Server) handleClient(conn net.Conn) {
 reject:
 	conn.Close()
 	if client != nil {
-		s.deleteHostConn(client.Host)
+		s.connPool.markHostDead(client.Host)
 	}
 }
 
@@ -185,31 +166,6 @@ func (s *Server) checkID(id id.ID) (*AllowedClient, bool) {
 		}
 	}
 	return nil, false
-}
-
-func (s *Server) addHostConn(client *AllowedClient, conn net.Conn) error {
-	key := hostPort(client.Host)
-
-	s.hostConnMu.Lock()
-	defer s.hostConnMu.Unlock()
-
-	if c, ok := s.hostConn[key]; ok {
-		return fmt.Errorf("client %q already connected from %q", client.ID, c.RemoteAddr().String())
-	}
-
-	s.hostConn[key] = conn
-
-	return nil
-}
-
-func (s *Server) deleteHostConn(host string) {
-	s.hostConnMu.Lock()
-	delete(s.hostConn, hostPort(host))
-	s.hostConnMu.Unlock()
-}
-
-func hostPort(host string) string {
-	return fmt.Sprint(host, ":443")
 }
 
 func (s *Server) listenClientListeners() {
