@@ -20,8 +20,6 @@ type closeReader interface {
 }
 
 func transfer(side string, dst io.Writer, src io.ReadCloser, log logging.Logger) {
-	log.Debug("proxing %s", side)
-
 	n, err := io.Copy(dst, src)
 	if err != nil {
 		log.Error("%s: copy error: %s", side, err)
@@ -37,7 +35,7 @@ func transfer(side string, dst io.Writer, src io.ReadCloser, log logging.Logger)
 		src.Close()
 	}
 
-	log.Debug("done proxing %s %d bytes", side, n)
+	log.Debug("Coppied %d bytes from %s", n, side)
 }
 
 func copyHeader(dst, src http.Header) {
@@ -46,4 +44,16 @@ func copyHeader(dst, src http.Header) {
 		copy(vv, v)
 		dst[k] = vv
 	}
+}
+
+type flushWriter struct {
+	w io.Writer
+}
+
+func (fw flushWriter) Write(p []byte) (n int, err error) {
+	n, err = fw.w.Write(p)
+	if f, ok := fw.w.(http.Flusher); ok {
+		f.Flush()
+	}
+	return
 }

@@ -35,21 +35,19 @@ func TestTCP(t *testing.T) {
 	assert.Nil(t, err)
 	defer listener.Close()
 
-	server, err := h2tun.NewServer(
-		tlsConfig(cert),
-		[]*h2tun.AllowedClient{
-			{
-				ID:        clientID,
-				Host:      "foobar.com",
-				Listeners: []net.Listener{listener},
-			},
-		},
-	)
+	server, err := h2tun.NewServer(&h2tun.ServerConfig{
+		TLSConfig:      tlsConfig(cert),
+		AllowedClients: []*h2tun.AllowedClient{{ID: clientID, Host: "foobar.com", Listeners: []net.Listener{listener}}},
+	})
 	assert.Nil(t, err)
 	server.Start()
 	defer server.Close()
 
-	client := h2tun.NewClient(echoProxyFunc, server.Addr().String(), tlsConfig(cert))
+	client := h2tun.NewClient(&h2tun.ClientConfig{
+		ServerAddr:      server.Addr(),
+		TLSClientConfig: tlsConfig(cert),
+		Proxy:           echoProxyFunc,
+	})
 	go client.Connect()
 	defer client.Close()
 
@@ -92,20 +90,19 @@ func TestHTTP(t *testing.T) {
 	assert.Nil(t, err)
 	clientID := idFromTLSCert(cert)
 
-	server, err := h2tun.NewServer(
-		tlsConfig(cert),
-		[]*h2tun.AllowedClient{
-			{
-				ID:   clientID,
-				Host: "foobar.com",
-			},
-		},
-	)
+	server, err := h2tun.NewServer(&h2tun.ServerConfig{
+		TLSConfig:      tlsConfig(cert),
+		AllowedClients: []*h2tun.AllowedClient{{ID: clientID, Host: "foobar.com"}},
+	})
 	assert.Nil(t, err)
 	server.Start()
 	defer server.Close()
 
-	client := h2tun.NewClient(echoHTTPProxyFunc, server.Addr().String(), tlsConfig(cert))
+	client := h2tun.NewClient(&h2tun.ClientConfig{
+		ServerAddr:      server.Addr(),
+		TLSClientConfig: tlsConfig(cert),
+		Proxy:           echoHTTPProxyFunc,
+	})
 	go client.Connect()
 	defer client.Close()
 
