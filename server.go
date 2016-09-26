@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/andrew-d/id"
@@ -19,6 +20,7 @@ import (
 //
 // TODO (phase2) add dynamic allowed client add remove
 // TODO (phase2) add ping control message type to measure RTT, see https://godoc.org/github.com/hashicorp/yamux#Session.Ping
+// TODO (phase2) add optional stream compression Accept-Encoding <-> Content-Encoding
 
 type AllowedClient struct {
 	ID        id.ID
@@ -93,6 +95,10 @@ func (s *Server) listenControl() {
 		if err != nil {
 			s.log.Warning("Accept %s control connection to %q failed: %s",
 				s.listener.Addr().Network(), s.listener.Addr().String(), err)
+			// TODO (phase2) add proper parking of listener on close
+			if strings.Contains(err.Error(), "use of closed network connection") {
+				return
+			}
 			continue
 		}
 		s.log.Info("Accepted %s control connection from %q to %q",
