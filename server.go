@@ -252,8 +252,10 @@ func (s *Server) proxy(host string, w io.Writer, r interface{}, msg *proto.Contr
 
 	localToRemote := func() {
 		if hr, ok := r.(*http.Request); ok {
-			hr.Write(pw)
+			cw := &countWriter{pw, 0}
+			hr.Write(cw)
 			pw.Close()
+			s.log.Debug("Coppied %d bytes from %s", cw.count, "local to remote")
 		} else {
 			transfer("local to remote", pw, r.(io.ReadCloser), s.log)
 		}

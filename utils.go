@@ -46,6 +46,17 @@ func copyHeader(dst, src http.Header) {
 	}
 }
 
+type countWriter struct {
+	w io.Writer
+	count int64
+}
+
+func (cw *countWriter) Write(p []byte) (n int, err error) {
+	n, err = cw.w.Write(p)
+	cw.count += int64(n)
+	return
+}
+
 type flushWriter struct {
 	w io.Writer
 }
