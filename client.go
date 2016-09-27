@@ -62,7 +62,7 @@ func (c *Client) Connect() error {
 	}
 	c.conn = conn
 
-	c.httpServer.ServeConn(conn, &http2.ServeConnOpts{
+	go c.httpServer.ServeConn(conn, &http2.ServeConnOpts{
 		Handler: http.HandlerFunc(c.serveHTTP),
 	})
 

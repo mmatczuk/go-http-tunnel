@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	HTTPProtocol = "HTTP"
+	HTTPProtocol = "http"
 )
 
 // Action represents type of ControlMsg request.

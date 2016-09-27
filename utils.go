@@ -47,7 +47,7 @@ func copyHeader(dst, src http.Header) {
 }
 
 type countWriter struct {
-	w io.Writer
+	w     io.Writer
 	count int64
 }
 

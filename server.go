@@ -18,9 +18,11 @@ import (
 
 // TODO document
 //
-// TODO (phase2) add dynamic allowed client add remove
-// TODO (phase2) add ping control message type to measure RTT, see https://godoc.org/github.com/hashicorp/yamux#Session.Ping
-// TODO (phase2) add optional stream compression Accept-Encoding <-> Content-Encoding
+// TODO (phase2) use sync.Pool to avoid allocations of control message, analyse allocations
+// TODO (phase2) add support for UDP and IP by adding `Conns []net.Conn` to AllowedClient
+// TODO (phase2) dynamic AllowedClient management
+// TODO (phase2) ping, like https://godoc.org/github.com/hashicorp/yamux#Session.Ping
+// TODO (phase2) stream compression Accept-Encoding <-> Content-Encoding
 
 type AllowedClient struct {
 	ID        id.ID
@@ -95,7 +97,6 @@ func (s *Server) listenControl() {
 		if err != nil {
 			s.log.Warning("Accept %s control connection to %q failed: %s",
 				s.listener.Addr().Network(), s.listener.Addr().String(), err)
-			// TODO (phase2) add proper parking of listener on close
 			if strings.Contains(err.Error(), "use of closed network connection") {
 				return
 			}
@@ -192,6 +193,9 @@ func (s *Server) listen(l net.Listener, client *AllowedClient) {
 		if err != nil {
 			s.log.Warning("Accept %s connection to %q failed: %s",
 				s.listener.Addr().Network(), s.listener.Addr().String(), err)
+			if strings.Contains(err.Error(), "use of closed network connection") {
+				return
+			}
 			continue
 		}
 		s.log.Debug("Accepted %s connection from %q to %q",
@@ -223,7 +227,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func trimPort(hostPort string) (host string) {
 	host, _, _ = net.SplitHostPort(hostPort)
 	if host == "" {
-		return hostPort
+		host = hostPort
 	}
 	return
 }
@@ -251,12 +255,15 @@ func (s *Server) proxy(host string, w io.Writer, r interface{}, msg *proto.Contr
 	var localToRemoteDone = make(chan struct{})
 
 	localToRemote := func() {
-		if hr, ok := r.(*http.Request); ok {
+		// TODO (phase3) refactor switch to strategy pattern
+		switch msg.Protocol {
+		case proto.HTTPProtocol:
+			hr := r.(*http.Request)
 			cw := &countWriter{pw, 0}
 			hr.Write(cw)
 			pw.Close()
 			s.log.Debug("Coppied %d bytes from %s", cw.count, "local to remote")
-		} else {
+		default:
 			transfer("local to remote", pw, r.(io.ReadCloser), s.log)
 		}
 		close(localToRemoteDone)
@@ -268,7 +275,10 @@ func (s *Server) proxy(host string, w io.Writer, r interface{}, msg *proto.Contr
 			s.log.Error("Proxying conn to client %q failed: %s", host, err)
 			return
 		}
-		if hw, ok := w.(http.ResponseWriter); ok {
+		// TODO (phase3) refactor switch to strategy pattern
+		switch msg.Protocol {
+		case proto.HTTPProtocol:
+			hw := w.(http.ResponseWriter)
 			pr, err := http.ReadResponse(bufio.NewReader(resp.Body), r.(*http.Request))
 			if err != nil {
 				s.log.Error("Reading HTTP response failed: %s", err)
@@ -277,7 +287,7 @@ func (s *Server) proxy(host string, w io.Writer, r interface{}, msg *proto.Contr
 			copyHeader(hw.Header(), pr.Header)
 			hw.WriteHeader(pr.StatusCode)
 			transfer("remote to local", hw, pr.Body, s.log)
-		} else {
+		default:
 			transfer("remote to local", w, resp.Body, s.log)
 		}
 	}

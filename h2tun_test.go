@@ -5,13 +5,12 @@ import (
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -20,107 +19,153 @@ import (
 	"github.com/koding/h2tun"
 	"github.com/koding/h2tun/proto"
 	"github.com/koding/logging"
-	"github.com/stretchr/testify/assert"
 )
 
-func TestTCP(t *testing.T) {
-	logging.DefaultLevel = logging.DEBUG
-	logging.DefaultHandler.SetLevel(logging.DEBUG)
+const (
+	payloadInitialSize = 16
+	payloadLen         = 10
+)
 
-	cert, err := loadTestCert()
-	assert.Nil(t, err)
-	clientID := idFromTLSCert(cert)
+var payload = randPayload(payloadInitialSize, payloadLen)
 
-	listener, err := net.Listen("tcp", ":7777")
-	assert.Nil(t, err)
-	defer listener.Close()
+func TestProxying(t *testing.T) {
+	t.Parallel()
 
-	server, err := h2tun.NewServer(&h2tun.ServerConfig{
+	cert, id := selfSignedCert()
+
+	l, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Error("Listen failed", err)
+	}
+	defer l.Close()
+
+	s, err := h2tun.NewServer(&h2tun.ServerConfig{
 		TLSConfig:      tlsConfig(cert),
-		AllowedClients: []*h2tun.AllowedClient{{ID: clientID, Host: "foobar.com", Listeners: []net.Listener{listener}}},
+		AllowedClients: []*h2tun.AllowedClient{{ID: id, Host: "foobar.com", Listeners: []net.Listener{l}}},
 	})
-	assert.Nil(t, err)
-	server.Start()
-	defer server.Close()
+	if err != nil {
+		t.Error("Server creation failed", err)
+	}
+	s.Start()
+	defer s.Close()
 
-	client := h2tun.NewClient(&h2tun.ClientConfig{
-		ServerAddr:      server.Addr(),
+	c := h2tun.NewClient(&h2tun.ClientConfig{
+		ServerAddr:      s.Addr(),
 		TLSClientConfig: tlsConfig(cert),
 		Proxy:           echoProxyFunc,
 	})
-	go client.Connect()
-	defer client.Close()
+	if err := c.Connect(); err != nil {
+		t.Error("Client start failed", err)
+	}
+	defer c.Close()
 
-	time.Sleep(time.Second)
+	data := []struct {
+		protocol string
+		repeat   int
+		seq      []uint
+	}{
+		{"http", 16, []uint{1000, 800, 600, 400, 200, 100}},
+		{"http", 8, []uint{200, 400, 600, 800, 1000}},
+		{"http", 4, []uint{0, 0, 0, 0, 0, 0, 0, 0, 0, 1000}},
 
-	conn, err := net.Dial("tcp", "localhost:7777")
-	assert.Nil(t, err)
-
-	const testPayload = "this is a test"
+		{"tcp", 16, []uint{1000, 800, 600, 400, 200, 100}},
+		{"tcp", 8, []uint{200, 400, 600, 800, 1000}},
+		{"tcp", 4, []uint{0, 0, 0, 0, 0, 0, 0, 0, 0, 1000}},
+	}
 
 	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		for _, c := range testPayload {
-			_, err := conn.Write([]byte{byte(c)})
-			assert.Nil(t, err)
-			time.Sleep(time.Millisecond)
+	for _, tt := range data {
+		for i := 0; i < tt.repeat; i++ {
+			wg.Add(1)
+			switch tt.protocol {
+			case "http":
+				go testHTTP(t, s, tt.seq, &wg)
+			case "tcp":
+				go testTCP(t, l.Addr().String(), tt.seq, &wg)
+			default:
+				panic("Unexpected network type")
+			}
 		}
-		conn.Close()
-		wg.Done()
-	}()
-	go func() {
-		b := bytes.NewBuffer([]byte{})
-		io.Copy(b, conn)
-		assert.Equal(t, testPayload, b.String())
-		wg.Done()
-	}()
+	}
 	wg.Wait()
 }
 
-func echoProxyFunc(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage) {
-	io.Copy(w, r)
+func testHTTP(t *testing.T, h http.Handler, seq []uint, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	var buf = bytes.NewBuffer(bigBuffer())
+	for idx, s := range seq {
+		for s > 0 {
+			r, err := http.NewRequest(http.MethodPost, "http://foobar.com/some/path", bytes.NewReader(payload[idx]))
+			if err != nil {
+				panic("Failed to create request")
+			}
+			buf.Reset()
+			w := &httptest.ResponseRecorder{
+				HeaderMap: make(http.Header),
+				Body:      buf,
+				Code:      200,
+			}
+			h.ServeHTTP(w, r)
+			if w.Code != http.StatusOK {
+				t.Error("Unexpected status code", w)
+			}
+			n, m := w.Body.Len(), len(payload[idx])
+			if n != m {
+				t.Log("Read mismatch", n, m)
+			}
+			s--
+		}
+	}
 }
 
-func TestHTTP(t *testing.T) {
-	logging.DefaultLevel = logging.DEBUG
-	logging.DefaultHandler.SetLevel(logging.DEBUG)
+func testTCP(t *testing.T, addr string, seq []uint, wg *sync.WaitGroup) {
+	defer wg.Done()
 
-	cert, err := loadTestCert()
-	assert.Nil(t, err)
-	clientID := idFromTLSCert(cert)
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Error("Dial failed", err)
+	}
+	defer conn.Close()
 
-	server, err := h2tun.NewServer(&h2tun.ServerConfig{
-		TLSConfig:      tlsConfig(cert),
-		AllowedClients: []*h2tun.AllowedClient{{ID: clientID, Host: "foobar.com"}},
-	})
-	assert.Nil(t, err)
-	server.Start()
-	defer server.Close()
+	var buf = bigBuffer()
+	var read, write int
+	for idx, s := range seq {
+		for s > 0 {
+			m, err := conn.Write(payload[idx])
+			if err != nil {
+				t.Error("Write failed", err)
+			}
+			if m != len(payload[idx]) {
+				t.Log("Write mismatch", m, len(payload[idx]))
+			}
+			write += m
 
-	client := h2tun.NewClient(&h2tun.ClientConfig{
-		ServerAddr:      server.Addr(),
-		TLSClientConfig: tlsConfig(cert),
-		Proxy:           echoHTTPProxyFunc,
-	})
-	go client.Connect()
-	defer client.Close()
+			n, err := conn.Read(buf)
+			if err != nil {
+				t.Error("Read failed", err)
+			}
+			if n != m {
+				t.Log("Read mismatch", n, m)
+			}
+			read += n
+			s--
+		}
+	}
 
-	time.Sleep(time.Second)
+	for read != write {
+		t.Log("No yet read everything", "write", write, "read", read)
+		time.Sleep(10 * time.Millisecond)
+		n, err := conn.Read(buf)
+		if err != nil {
+			t.Error("Read failed", err)
+		}
+		read += n
+	}
 
-	s := httptest.NewServer(server)
-	defer s.Close()
-
-	const testPayload = "this is a test"
-
-	_, port, _ := net.SplitHostPort(s.Listener.Addr().String())
-	r, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://foobar.com:%s/some/path", port), strings.NewReader(testPayload))
-	assert.Nil(t, err)
-
-	resp, err := http.DefaultClient.Do(r)
-	assert.Nil(t, err)
-	body, err := ioutil.ReadAll(resp.Body)
-	assert.Equal(t, testPayload, string(body))
+	if read != write {
+		t.Fatal("Write read mismatch", read, write)
+	}
 }
 
 func echoHTTPProxyFunc(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage) {
@@ -129,30 +174,66 @@ func echoHTTPProxyFunc(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage) 
 		panic(err)
 	}
 
-	body, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		panic(err)
-	}
-
-	headers := make(http.Header)
-	headers.Set("Content-Type", "text/plain")
-
 	resp := &http.Response{
-		Status:        "200 OK",
-		StatusCode:    200,
-		Proto:         "HTTP/1.0",
-		ProtoMajor:    1,
-		ProtoMinor:    0,
-		Request:       req,
-		Header:        headers,
-		ContentLength: int64(len(body)),
-		Body:          ioutil.NopCloser(bytes.NewReader(body)),
+		Status:     "200 OK",
+		StatusCode: 200,
+		Proto:      "HTTP/1.0",
+		ProtoMajor: 1,
+		ProtoMinor: 0,
+		Request:    req,
+		Header:     make(http.Header),
 	}
+
+	if req.Body != nil {
+		body, err := ioutil.ReadAll(req.Body)
+		if err != nil {
+			panic(err)
+		}
+		resp.ContentLength = int64(len(body))
+		resp.Body = ioutil.NopCloser(bytes.NewReader(body))
+	}
+
 	resp.Write(w)
 }
 
-func loadTestCert() (tls.Certificate, error) {
-	return tls.LoadX509KeyPair("./test-fixtures/selfsigned.crt", "./test-fixtures/selfsigned.key")
+func echoProxyFunc(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage) {
+	switch msg.Protocol {
+	case proto.HTTPProtocol:
+		echoHTTPProxyFunc(w, r, msg)
+	default:
+		io.Copy(w, r)
+	}
+}
+
+func randPayload(initialSize, n int) [][]byte {
+	payload := make([][]byte, n)
+	l := initialSize
+	for i := 0; i < n; i++ {
+		payload[i] = randBytes(l)
+		l *= 2
+	}
+	return payload
+}
+
+func randBytes(n int) []byte {
+	b := make([]byte, n)
+	read, err := rand.Read(b)
+	if err != nil {
+		panic(err)
+	}
+	if read != n {
+		panic("Read did not fill whole slice")
+	}
+	return b
+}
+
+func bigBuffer() []byte {
+	return make([]byte, len(payload[len(payload)-1]))
+}
+
+func initLogging() {
+	logging.DefaultLevel = logging.DEBUG
+	logging.DefaultHandler.SetLevel(logging.DEBUG)
 }
 
 func tlsConfig(cert tls.Certificate) *tls.Config {
@@ -170,15 +251,15 @@ func tlsConfig(cert tls.Certificate) *tls.Config {
 	return c
 }
 
-func idFromTLSCert(cert tls.Certificate) id.ID {
+func selfSignedCert() (tls.Certificate, id.ID) {
+	cert, err := tls.LoadX509KeyPair("./test-fixtures/selfsigned.crt", "./test-fixtures/selfsigned.key")
+	if err != nil {
+		panic(err)
+	}
 	x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
 	if err != nil {
 		panic(err)
 	}
 
-	return idFromX509Cert(x509Cert)
-}
-
-func idFromX509Cert(cert *x509.Certificate) id.ID {
-	return id.New(cert.Raw)
+	return cert, id.New(x509Cert.Raw)
 }
