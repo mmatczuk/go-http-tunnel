@@ -1,12 +1,9 @@
 package h2tun_test
 
 import (
-	"bufio"
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
-	"io"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
@@ -17,8 +14,7 @@ import (
 
 	"github.com/andrew-d/id"
 	"github.com/koding/h2tun"
-	"github.com/koding/h2tun/proto"
-	"github.com/koding/logging"
+	"github.com/koding/h2tun/h2tuntest"
 )
 
 const (
@@ -40,8 +36,14 @@ func TestProxying(t *testing.T) {
 	defer l.Close()
 
 	s, err := h2tun.NewServer(&h2tun.ServerConfig{
-		TLSConfig:      tlsConfig(cert),
-		AllowedClients: []*h2tun.AllowedClient{{ID: id, Host: "foobar.com", Listeners: []net.Listener{l}}},
+		TLSConfig: h2tuntest.TLSConfig(cert),
+		AllowedClients: []*h2tun.AllowedClient{
+			{
+				ID:        id,
+				Host:      "foobar.com",
+				Listeners: []net.Listener{l},
+			},
+		},
 	})
 	if err != nil {
 		t.Error("Server creation failed", err)
@@ -51,8 +53,8 @@ func TestProxying(t *testing.T) {
 
 	c := h2tun.NewClient(&h2tun.ClientConfig{
 		ServerAddr:      s.Addr(),
-		TLSClientConfig: tlsConfig(cert),
-		Proxy:           echoProxyFunc,
+		TLSClientConfig: h2tuntest.TLSConfig(cert),
+		Proxy:           h2tuntest.EchoProxyFunc,
 	})
 	if err := c.Connect(); err != nil {
 		t.Error("Client start failed", err)
@@ -153,7 +155,7 @@ func testTCP(t *testing.T, addr string, seq []uint, wg *sync.WaitGroup) {
 		}
 	}
 
-	for read != write {
+	for read < write {
 		t.Log("No yet read everything", "write", write, "read", read)
 		time.Sleep(10 * time.Millisecond)
 		n, err := conn.Read(buf)
@@ -168,41 +170,17 @@ func testTCP(t *testing.T, addr string, seq []uint, wg *sync.WaitGroup) {
 	}
 }
 
-func echoHTTPProxyFunc(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage) {
-	req, err := http.ReadRequest(bufio.NewReader(r))
+func selfSignedCert() (tls.Certificate, id.ID) {
+	cert, err := tls.LoadX509KeyPair("./test-fixtures/selfsigned.crt", "./test-fixtures/selfsigned.key")
+	if err != nil {
+		panic(err)
+	}
+	x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
 	if err != nil {
 		panic(err)
 	}
 
-	resp := &http.Response{
-		Status:     "200 OK",
-		StatusCode: 200,
-		Proto:      "HTTP/1.0",
-		ProtoMajor: 1,
-		ProtoMinor: 0,
-		Request:    req,
-		Header:     make(http.Header),
-	}
-
-	if req.Body != nil {
-		body, err := ioutil.ReadAll(req.Body)
-		if err != nil {
-			panic(err)
-		}
-		resp.ContentLength = int64(len(body))
-		resp.Body = ioutil.NopCloser(bytes.NewReader(body))
-	}
-
-	resp.Write(w)
-}
-
-func echoProxyFunc(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage) {
-	switch msg.Protocol {
-	case proto.HTTPProtocol:
-		echoHTTPProxyFunc(w, r, msg)
-	default:
-		io.Copy(w, r)
-	}
+	return cert, id.New(x509Cert.Raw)
 }
 
 func randPayload(initialSize, n int) [][]byte {
@@ -229,37 +207,4 @@ func randBytes(n int) []byte {
 
 func bigBuffer() []byte {
 	return make([]byte, len(payload[len(payload)-1]))
-}
-
-func initLogging() {
-	logging.DefaultLevel = logging.DEBUG
-	logging.DefaultHandler.SetLevel(logging.DEBUG)
-}
-
-func tlsConfig(cert tls.Certificate) *tls.Config {
-	c := &tls.Config{
-		Certificates:             []tls.Certificate{cert},
-		ClientAuth:               tls.RequestClientCert,
-		SessionTicketsDisabled:   true,
-		InsecureSkipVerify:       true,
-		MinVersion:               tls.VersionTLS12,
-		CipherSuites:             []uint16{tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256},
-		PreferServerCipherSuites: true,
-		NextProtos:               []string{"h2"},
-	}
-	c.BuildNameToCertificate()
-	return c
-}
-
-func selfSignedCert() (tls.Certificate, id.ID) {
-	cert, err := tls.LoadX509KeyPair("./test-fixtures/selfsigned.crt", "./test-fixtures/selfsigned.key")
-	if err != nil {
-		panic(err)
-	}
-	x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
-	if err != nil {
-		panic(err)
-	}
-
-	return cert, id.New(x509Cert.Raw)
 }

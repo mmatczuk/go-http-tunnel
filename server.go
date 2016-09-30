@@ -23,6 +23,8 @@ import (
 // TODO (phase2) dynamic AllowedClient management
 // TODO (phase2) ping, like https://godoc.org/github.com/hashicorp/yamux#Session.Ping
 // TODO (phase2) stream compression Accept-Encoding <-> Content-Encoding
+// TODO (phase2) add monitoring hooks
+// TODO (phase2) add control message stringer
 
 type AllowedClient struct {
 	ID        id.ID
@@ -32,14 +34,14 @@ type AllowedClient struct {
 
 // ServerConfig is Server configuration object.
 type ServerConfig struct {
+	// Addr is TCP address to listen on for client connections, ":0" if empty.
+	Addr string
 	// TLSConfig specifies the TLS configuration to use with tls.Listener.
 	TLSConfig *tls.Config
 	// Listener is an optional client server connection middleware.
 	Listener func(net.Listener) net.Listener
-
 	// AllowedClients specifies clients that can connect to the server.
 	AllowedClients []*AllowedClient
-
 	// Log specifies the logger. If nil a default logging.Logger is used.
 	Log logging.Logger
 }
@@ -57,7 +59,12 @@ type Server struct {
 
 // NewServer creates new Server base on configuration.
 func NewServer(config *ServerConfig) (*Server, error) {
-	l, err := tls.Listen("tcp", ":0", config.TLSConfig)
+	addr := ":0"
+	if config.Addr != "" {
+		addr = config.Addr
+	}
+
+	l, err := tls.Listen("tcp", addr, config.TLSConfig)
 	if err != nil {
 		return nil, fmt.Errorf("tls listener failed :%s", err)
 	}
@@ -208,7 +215,12 @@ func (s *Server) listen(l net.Listener, client *AllowedClient) {
 			ForwardedBy:  conn.LocalAddr().String(),
 		}
 
-		go s.proxy(client.Host, conn, conn, msg)
+		go func() {
+			err := s.proxyConn(client.Host, conn, msg)
+			if err != nil {
+				s.log.Warning("Error %s: %s", msg, err)
+			}
+		}()
 	}
 }
 
@@ -221,7 +233,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		URLPath:      r.URL.Path,
 	}
 
-	s.proxy(trimPort(r.Host), w, r, msg)
+	err := s.proxyHTTP(trimPort(r.Host), w, r, msg)
+	if err != nil {
+		s.log.Warning("Error %s: %s", msg, err)
+		http.Error(w, err.Error(), http.StatusBadGateway)
+	}
 }
 
 func trimPort(hostPort string) (host string) {
@@ -232,14 +248,8 @@ func trimPort(hostPort string) (host string) {
 	return
 }
 
-func (s *Server) proxy(host string, w io.Writer, r interface{}, msg *proto.ControlMessage) {
-	s.log.Debug("Start proxying %v to %q", msg, host)
-
-	defer func() {
-		if c, ok := r.(io.Closer); ok {
-			c.Close()
-		}
-	}()
+func (s *Server) proxyHTTP(host string, w http.ResponseWriter, r *http.Request, msg *proto.ControlMessage) error {
+	s.log.Debug("Start %s", msg)
 
 	pr, pw := io.Pipe()
 	defer pr.Close()
@@ -247,56 +257,71 @@ func (s *Server) proxy(host string, w io.Writer, r interface{}, msg *proto.Contr
 
 	req, err := http.NewRequest(http.MethodPut, url(host), pr)
 	if err != nil {
-		s.log.Error("Request creation failed: %s", err)
-		return
+		return fmt.Errorf("request creation error: %s", err)
 	}
 	msg.WriteTo(req.Header)
 
-	var localToRemoteDone = make(chan struct{})
-
-	localToRemote := func() {
-		// TODO (phase3) refactor switch to strategy pattern
-		switch msg.Protocol {
-		case proto.HTTPProtocol:
-			hr := r.(*http.Request)
-			cw := &countWriter{pw, 0}
-			hr.Write(cw)
-			pw.Close()
-			s.log.Debug("Coppied %d bytes from %s", cw.count, "local to remote")
-		default:
-			transfer("local to remote", pw, r.(io.ReadCloser), s.log)
-		}
-		close(localToRemoteDone)
-	}
-
-	remoteToLocal := func() {
-		resp, err := s.httpClient.Do(req)
+	done := make(chan struct{})
+	go func() {
+		cw := &countWriter{pw, 0}
+		err := r.Write(cw)
 		if err != nil {
-			s.log.Error("Proxying conn to client %q failed: %s", host, err)
-			return
+			s.log.Debug("Write to pipe failed: %s", err)
 		}
-		// TODO (phase3) refactor switch to strategy pattern
-		switch msg.Protocol {
-		case proto.HTTPProtocol:
-			hw := w.(http.ResponseWriter)
-			pr, err := http.ReadResponse(bufio.NewReader(resp.Body), r.(*http.Request))
-			if err != nil {
-				s.log.Error("Reading HTTP response failed: %s", err)
-				return
-			}
-			copyHeader(hw.Header(), pr.Header)
-			hw.WriteHeader(pr.StatusCode)
-			transfer("remote to local", hw, pr.Body, s.log)
-		default:
-			transfer("remote to local", w, resp.Body, s.log)
-		}
+		TransferLog.Debug("Coppied %d bytes from %s", cw.count, "local to remote")
+		close(done)
+	}()
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("proxy request error: %s", err)
 	}
 
-	go localToRemote()
-	remoteToLocal()
-	<-localToRemoteDone
+	inner, err := http.ReadResponse(bufio.NewReader(resp.Body), r)
+	if err != nil {
+		return fmt.Errorf("reading response error: %s", msg, host, err)
+	}
+	copyHeader(w.Header(), inner.Header)
+	w.WriteHeader(inner.StatusCode)
+	if inner.Body != nil {
+		transfer("remote to local", w, inner.Body)
+	}
 
-	s.log.Debug("Done proxying %v to %q", msg, host)
+	<-done
+	s.log.Debug("Done %s", msg)
+	return nil
+}
+
+func (s *Server) proxyConn(host string, c net.Conn, msg *proto.ControlMessage) error {
+	s.log.Debug("Start %s", msg)
+	defer c.Close()
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+	defer pw.Close()
+
+	req, err := http.NewRequest(http.MethodPut, url(host), pr)
+	if err != nil {
+		return fmt.Errorf("request creation error: %s", err)
+	}
+	msg.WriteTo(req.Header)
+
+	done := make(chan struct{})
+	go func() {
+		transfer("local to remote", pw, c)
+		close(done)
+	}()
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("proxy request error: %s", err)
+	}
+
+	transfer("remote to local", c, resp.Body)
+
+	<-done
+	s.log.Debug("Done %s", msg)
+	return nil
 }
 
 func (s *Server) Addr() string {

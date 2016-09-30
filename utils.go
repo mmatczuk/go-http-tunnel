@@ -19,10 +19,12 @@ type closeReader interface {
 	CloseRead() error
 }
 
-func transfer(side string, dst io.Writer, src io.ReadCloser, log logging.Logger) {
+var TransferLog = logging.NewLogger("transfer")
+
+func transfer(side string, dst io.Writer, src io.ReadCloser) {
 	n, err := io.Copy(dst, src)
 	if err != nil {
-		log.Error("%s: copy error: %s", side, err)
+		TransferLog.Error("%s: copy error: %s", side, err)
 	}
 
 	if d, ok := dst.(closeWriter); ok {
@@ -35,7 +37,7 @@ func transfer(side string, dst io.Writer, src io.ReadCloser, log logging.Logger)
 		src.Close()
 	}
 
-	log.Debug("Coppied %d bytes from %s", n, side)
+	TransferLog.Debug("Coppied %d bytes from %s", n, side)
 }
 
 func copyHeader(dst, src http.Header) {

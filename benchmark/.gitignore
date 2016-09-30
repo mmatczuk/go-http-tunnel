@@ -1,0 +1,12 @@
+/data
+/results
+/targets
+
+/h2tunclient
+/h2tunserver
+/kodingtunnelserver
+/kodingtunnelclient
+/hdr
+
+*.log
+*.pid
