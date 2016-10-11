@@ -1,0 +1,32 @@
+language: go
+sudo: false
+
+go:
+  - 1.6
+  - tip
+
+matrix:
+    fast_finish: true
+
+addons:
+  apt:
+    packages:
+    - moreutils
+
+before_install:
+  - go get -u golang.org/x/tools/cmd/cover
+  - go get -u github.com/golang/lint/golint
+  - go get -u github.com/mattn/goveralls
+
+install:
+  - go get -d ./...
+  - go build ./...
+
+script:
+  - gofmt -s -l . | ifne false
+  - go vet ./...
+  - $HOME/gopath/bin/golint ./...
+  - go test -covermode=count -coverprofile=profile.cov -race . ./proto
+
+after_script:
+  - $HOME/gopath/bin/goveralls -coverprofile=profile.cov -service=travis-ci

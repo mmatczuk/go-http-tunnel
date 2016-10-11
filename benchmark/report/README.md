@@ -2,17 +2,15 @@
 
 The benchmark compares h2tun to [koding tunnel](https://github.com/koding/tunnel) on serving 184 midsized files that were gathered by saving `amazon.com` for offline view. The data set consists of images and text data (js, css, html). On start client loads the files into memory and act as a file server.
 
+The diagrams were rendered using [hdrhistogram](http://hdrhistogram.github.io/HdrHistogram/plotFiles.html) and the input files were generated with help of [github.com/codahale/hdrhistogram](https://github.com/codahale/hdrhistogram) library. The vegeta raw results were corrected for stalls using [hdr correction method](https://godoc.org/github.com/codahale/hdrhistogram#Histogram.RecordCorrectedValue).
+
 ## Environment
 
-Tests were done on four AWS `t2.micro` instances. An instance for client, an instance for server and two instances for load generator. For load generation we used [vegeta](https://github.com/tsenart/vegeta) in distributed mode. Process open files limit was increased to `20000`.
+Tests were done on four AWS `t2.micro` instances. An instance for client, an instance for server and two instances for load generator. For load generation we used [vegeta](https://github.com/tsenart/vegeta) in distributed mode. On all machines open files limit (`ulimit -n`) was increased to `20000`.
 
 ## Load spike
 
-This test compares performance on two minute load spikes.
-
-h2tun handles 900 req/sec without dropping a message and preserving a good latency. At 1000 req/sec h2tun still works but drops 0,20% requests and latency is much worse.
-
-Koding tunnel is faster at 800 req/sec, but then latency degrades giving maximum values of 1.65s at 900 req/sec and 23.50s at 1000 req/sec (with 5% error rate).
+This test compares performance on two minute load spikes. h2tun handles 900 req/sec without dropping a message while preserving good latency. At 1000 req/sec h2tun still works but drops 0,20% requests and latency is much worse. Koding tunnel is faster at 800 req/sec, but at higher request rates latency degrades giving maximum values of 1.65s at 900 req/sec and 23.50s at 1000 req/sec (with 5% error rate).
 
 ![](spike.png)
 
@@ -31,13 +29,11 @@ Detailed results of load spike test.
 
 ## Constant pressure
 
-This test compares performance on twenty minutes constant pressure runs.
+This test compares performance on twenty minutes constant pressure runs. h2tun shows ability to trade latency for throughput. It runs fine at 300 req/sec but at higher request rates we observe poor latency and some message drops. Koding tunnel has acceptable performance at 300 req/sec, however, with increased load it just breaks.
 
-h2tun shows ability to trade latency for throughput. It runs just fine at 300 req/sec but at higher pace the bad things tend to aggregate resulting in increased latency or even message drops. 
+Both implementations have a connection (or memory) leak when dealing with too high loads. This results in process (or machine) crash as machine runs out of memory. It's 100% reproducible, when process crashes it has few hundred thousands go routines waiting on select in a connection and memory full of connection buffers. 
 
-Koding tunnel also runs well at 300 req/sec, however, with increased load it just breaks.
-
-Both implementations have a connection (or memory) leak when dealing with too high loads. This results in process (or machine) crash as machine runs out of memory. It's 100% reproducible, when process crashes it has few hundred thousands go routines waiting on select in a connection and memory full of connection buffers. During the constant pressure tests it also happened that koding tunnel client crashed a (panic in yamux), that was never observed for h2tun.
+During the constant pressure tests it also happened that koding tunnel client crashed a (panic in yamux), that was never observed for h2tun.
 
 ![](constload.png)
 

@@ -12,4 +12,4 @@ With h2tun you can proxy:
 
 ## Benchmark
 
-h2tun is benchmarked against [koding tunnel](https://github.com/koding/tunnel). h2tun proves to be more more stable, it can handle greater throughput with better latencies. [See benchmark report](benchmark/report/README.md) for more details.
+h2tun is benchmarked against [koding tunnel](https://github.com/koding/tunnel). h2tun proves to be more stable, it can handle greater throughput with better latencies. [See benchmark report](benchmark/report/README.md) for more details.

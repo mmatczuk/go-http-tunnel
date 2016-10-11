@@ -7,11 +7,7 @@ import (
 	"regexp"
 )
 
-const (
-	HTTPProtocol = "http"
-)
-
-// Action represents type of ControlMsg request.
+// Action represents type of ControlMessage.
 type Action int
 
 // ControlMessage actions.
@@ -22,6 +18,15 @@ const (
 // ControlMessage headers
 const (
 	ForwardedHeader = "Forwarded"
+)
+
+// Additional protocols, base protocols are net.Dial networks.
+//
+// Known networks are "tcp", "tcp4" (IPv4-only), "tcp6" (IPv6-only), "udp",
+// "udp4" (IPv4-only), "udp6" (IPv6-only), "ip", "ip4" (IPv4-only), "ip6" (IPv6-only),
+// "unix", "unixgram" and "unixpacket".
+const (
+	HTTPProtocol = "http"
 )
 
 // ControlMessage is sent from server to client to establish tunneled connection.
@@ -35,7 +40,7 @@ type ControlMessage struct {
 
 var xffRegexp = regexp.MustCompile("(for|by|proto|path)=([^;$]+)")
 
-// NewControlMessage creates control message based on `Forwarded` http header.
+// ParseControlMessage creates new ControlMessage based on "Forwarded" http header.
 func ParseControlMessage(h http.Header) (*ControlMessage, error) {
 	v := h.Get(ForwardedHeader)
 	if v == "" {
@@ -60,13 +65,13 @@ func ParseControlMessage(h http.Header) (*ControlMessage, error) {
 	return msg, nil
 }
 
-// WriteTo writes ControlMessage to `Forwarded` http header, "by" and "for" parameters
+// WriteTo writes ControlMessage to "Forwarded" http header, "by" and "for" parameters
 // take form of full IP and port.
 //
 // If the server receiving proxied requests requires some address-based functionality,
 // this parameter MAY instead contain an IP address (and, potentially, a port number)
 //
-// see https://tools.ietf.org/html/rfc7239.
+// See https://tools.ietf.org/html/rfc7239.
 func (c *ControlMessage) WriteTo(h http.Header) {
 	h.Set(ForwardedHeader, fmt.Sprintf("for=%s; by=%s; proto=%s; path=%s",
 		c.ForwardedFor, c.ForwardedBy, c.Protocol, c.URLPath))

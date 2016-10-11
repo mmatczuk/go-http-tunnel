@@ -20,6 +20,7 @@ import (
 	"github.com/koding/logging"
 )
 
+// EchoProxyFunc pipes reader with writer.
 func EchoProxyFunc(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage) {
 	switch msg.Protocol {
 	case proto.HTTPProtocol:
@@ -29,6 +30,8 @@ func EchoProxyFunc(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage) {
 	}
 }
 
+// EchoHTTPProxyFunc is a special case of EchoProxyFunc that handles HTTP
+// request response model.
 func EchoHTTPProxyFunc(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage) {
 	req, err := http.ReadRequest(bufio.NewReader(r))
 	if err != nil {
@@ -57,6 +60,9 @@ func EchoHTTPProxyFunc(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage) 
 	resp.Write(w)
 }
 
+// InMemoryFileServer scans directory dir, loads all files to memory and returns
+// a http ProxyFunc that maps URL paths to relative filesystem paths i.e. file
+// ./data/foo/bar.zip will be available under URL host:port/data/foo/bar.zip.
 func InMemoryFileServer(dir string) (h2tun.ProxyFunc, error) {
 	dir, err := filepath.Abs(dir)
 	if err != nil {
@@ -87,10 +93,6 @@ func InMemoryFileServer(dir string) (h2tun.ProxyFunc, error) {
 		return nil, fmt.Errorf("failed to read directory %q: %s", dir, err)
 	}
 
-	for k, v := range mux {
-		logging.Info("Mux %q %dB", k, len(v))
-	}
-
 	return func(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage) {
 		b, ok := mux[msg.URLPath]
 		if !ok {
@@ -109,6 +111,7 @@ func InMemoryFileServer(dir string) (h2tun.ProxyFunc, error) {
 	}, nil
 }
 
+// ResponseBytes returns http response containing file as body.
 func ResponseBytes(file string) ([]byte, error) {
 	resp := &http.Response{
 		Status:     "200 OK",
@@ -140,6 +143,8 @@ func ResponseBytes(file string) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
+// TLSConfig returns valid http/2 tls configuration that can be used by both
+// client and server.
 func TLSConfig(cert tls.Certificate) *tls.Config {
 	c := &tls.Config{
 		Certificates:             []tls.Certificate{cert},
@@ -155,6 +160,7 @@ func TLSConfig(cert tls.Certificate) *tls.Config {
 	return c
 }
 
+// DebugLogging makes koding logger print debug messages.
 func DebugLogging() {
 	logging.DefaultLevel = logging.DEBUG
 	logging.DefaultHandler.SetLevel(logging.DEBUG)

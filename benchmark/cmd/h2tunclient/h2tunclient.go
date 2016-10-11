@@ -52,10 +52,10 @@ func main() {
 		TLSClientConfig: h2tuntest.TLSConfig(cert),
 		Proxy:           p,
 	})
-	if err := c.Connect(); err != nil {
+	if err := c.Start(); err != nil {
 		logging.Fatal("Client start failed: %s", err)
 	}
-	defer c.Close()
+	defer c.Stop()
 
 	select {}
 }

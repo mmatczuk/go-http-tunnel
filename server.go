@@ -16,55 +16,47 @@ import (
 	"golang.org/x/net/http2"
 )
 
-// TODO document
-
+// AllowedClient specifies client entry points on server.
 type AllowedClient struct {
+	// ID is client TLS certificate ID.
 	ID        id.ID
+	// Host is URL host name, http requests to that host will be routed to the client.
 	Host      string
+	// Listeners is a list of listeners, connections the listeners accept
+	// will be routed to the client.
 	Listeners []net.Listener
 }
 
-// ServerConfig is Server configuration object.
+// ServerConfig defines configuration for the Server.
 type ServerConfig struct {
-	// Addr is TCP address to listen on for client connections, ":0" if empty.
+	// Addr is tcp address to listen on for client connections, ":0" if empty.
 	Addr string
-	// TLSConfig specifies the TLS configuration to use with tls.Listener.
+	// TLSConfig specifies the tls configuration to use with tls.Listener.
 	TLSConfig *tls.Config
-	// Listener is an optional client server connection middleware.
-	Listener func(net.Listener) net.Listener
+	// Listener specifies optional listener that clients would connect to.
+	// If Listener is nil tls.Listen("tcp", Addr, TLSConfig) is used.
+	Listener net.Listener
 	// AllowedClients specifies clients that can connect to the server.
 	AllowedClients []*AllowedClient
 	// Log specifies the logger. If nil a default logging.Logger is used.
 	Log logging.Logger
 }
 
-// Server is a tunnel server.
+// Server is responsible for proxying public connections to the client over a
+// tunnel connection.
 type Server struct {
 	config *ServerConfig
-
 	listener   net.Listener
 	connPool   *connPool
 	httpClient *http.Client
-
 	log logging.Logger
 }
 
-// NewServer creates new Server base on configuration.
+// NewServer creates a new Server.
 func NewServer(config *ServerConfig) (*Server, error) {
-	addr := ":0"
-	if config.Addr != "" {
-		addr = config.Addr
-	}
-
-	l, err := tls.Listen("tcp", addr, config.TLSConfig)
+	l, err := listener(config)
 	if err != nil {
 		return nil, fmt.Errorf("tls listener failed :%s", err)
-	}
-	if config.Listener != nil {
-		l = config.Listener(l)
-		if l == nil {
-			return nil, fmt.Errorf("listener function did not return a listener")
-		}
 	}
 
 	t := &http2.Transport{}
@@ -85,6 +77,21 @@ func NewServer(config *ServerConfig) (*Server, error) {
 	}, nil
 }
 
+func listener(config *ServerConfig) (net.Listener, error) {
+	if config.Listener != nil {
+		return config.Listener, nil
+	}
+
+	addr := ":0"
+	if config.Addr != "" {
+		addr = config.Addr
+	}
+
+	return tls.Listen("tcp", addr, config.TLSConfig)
+}
+
+// Start starts accepting connections form clients and allowed clients listeners.
+// For accepting http traffic one must run server as a handler to http server.
 func (s *Server) Start() {
 	go s.listenControl()
 	s.listenClientListeners()
@@ -216,6 +223,7 @@ func (s *Server) listen(l net.Listener, client *AllowedClient) {
 	}
 }
 
+// ServeHTTP proxies http connection to the client.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	msg := &proto.ControlMessage{
 		Action:       proto.RequestClientSession,
@@ -271,7 +279,7 @@ func (s *Server) proxyHTTP(host string, w http.ResponseWriter, r *http.Request, 
 
 	inner, err := http.ReadResponse(bufio.NewReader(resp.Body), r)
 	if err != nil {
-		return fmt.Errorf("reading response error: %s", msg, host, err)
+		return fmt.Errorf("reading response error: %s", err)
 	}
 	copyHeader(w.Header(), inner.Header)
 	w.WriteHeader(inner.StatusCode)
@@ -316,6 +324,7 @@ func (s *Server) proxyConn(host string, c net.Conn, msg *proto.ControlMessage) e
 	return nil
 }
 
+// Addr returns network address clients connect to.
 func (s *Server) Addr() string {
 	if s.listener == nil {
 		return ""
@@ -323,9 +332,11 @@ func (s *Server) Addr() string {
 	return s.listener.Addr().String()
 }
 
+// Close closes the server.
 func (s *Server) Close() error {
 	if s.listener == nil {
 		return nil
 	}
+
 	return s.listener.Close()
 }

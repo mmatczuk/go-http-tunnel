@@ -19,6 +19,7 @@ type closeReader interface {
 	CloseRead() error
 }
 
+// TransferLog is a dedicated logger for reporting bytes read/written.
 var TransferLog = logging.NewLogger("transfer")
 
 func transfer(side string, dst io.Writer, src io.ReadCloser) {

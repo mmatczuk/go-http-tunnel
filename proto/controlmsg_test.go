@@ -2,9 +2,8 @@ package proto
 
 import (
 	"net/http"
+	"reflect"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
 func TestControlMessage_WriteParse(t *testing.T) {
@@ -18,7 +17,10 @@ func TestControlMessage_WriteParse(t *testing.T) {
 	h := make(http.Header)
 	msg.WriteTo(h)
 	actual, err := ParseControlMessage(h)
-
-	assert.Nil(t, err)
-	assert.Equal(t, msg, actual)
+	if err != nil {
+		t.Errorf("Parse error %s", err)
+	}
+	if !reflect.DeepEqual(msg, actual) {
+		t.Errorf("Received %+v expected %+v", msg, actual)
+	}
 }

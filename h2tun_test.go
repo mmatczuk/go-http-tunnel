@@ -24,7 +24,7 @@ const (
 
 var payload = randPayload(payloadInitialSize, payloadLen)
 
-func TestProxying(t *testing.T) {
+func TestProxy(t *testing.T) {
 	t.Parallel()
 
 	cert, id := selfSignedCert()
@@ -56,23 +56,23 @@ func TestProxying(t *testing.T) {
 		TLSClientConfig: h2tuntest.TLSConfig(cert),
 		Proxy:           h2tuntest.EchoProxyFunc,
 	})
-	if err := c.Connect(); err != nil {
+	if err := c.Start(); err != nil {
 		t.Error("Client start failed", err)
 	}
-	defer c.Close()
+	defer c.Stop()
 
 	data := []struct {
 		protocol string
 		repeat   int
 		seq      []uint
 	}{
-		{"http", 16, []uint{1000, 800, 600, 400, 200, 100}},
-		{"http", 8, []uint{200, 400, 600, 800, 1000}},
-		{"http", 4, []uint{0, 0, 0, 0, 0, 0, 0, 0, 0, 1000}},
+		{"http", 4, []uint{100, 80, 60, 40, 20, 10}},
+		{"http", 2, []uint{20, 40, 60, 80, 100}},
+		{"http", 1, []uint{0, 0, 0, 0, 0, 0, 0, 0, 0, 100}},
 
-		{"tcp", 16, []uint{1000, 800, 600, 400, 200, 100}},
-		{"tcp", 8, []uint{200, 400, 600, 800, 1000}},
-		{"tcp", 4, []uint{0, 0, 0, 0, 0, 0, 0, 0, 0, 1000}},
+		{"tcp", 4, []uint{100, 80, 60, 40, 20, 10}},
+		{"tcp", 2, []uint{20, 40, 60, 80, 100}},
+		{"tcp", 1, []uint{0, 0, 0, 0, 0, 0, 0, 0, 0, 100}},
 	}
 
 	var wg sync.WaitGroup

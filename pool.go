@@ -11,8 +11,8 @@ import (
 )
 
 var (
-	noClientConnErr           = errors.New("no connection")
-	clientAlreadyConnectedErr = errors.New("client already connected")
+	errNoClientConn = errors.New("no connection")
+	errClientAlreadyConnected = errors.New("client already connected")
 )
 
 type connPool struct {
@@ -36,7 +36,7 @@ func (p *connPool) GetClientConn(req *http.Request, addr string) (*http2.ClientC
 		return cc, nil
 	}
 
-	return nil, noClientConnErr
+	return nil, errNoClientConn
 }
 
 func (p *connPool) MarkDead(c *http2.ClientConn) {
@@ -56,7 +56,7 @@ func (p *connPool) addHostConn(host string, conn net.Conn) error {
 	defer p.mu.Unlock()
 
 	if _, ok := p.conns[host]; ok {
-		return clientAlreadyConnectedErr
+		return errClientAlreadyConnected
 	}
 
 	cc, err := p.t.NewClientConn(conn)
