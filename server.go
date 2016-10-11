@@ -17,14 +17,6 @@ import (
 )
 
 // TODO document
-//
-// TODO (phase2) use sync.Pool to avoid allocations of control message, analyse allocations
-// TODO (phase2) add support for UDP and IP by adding `Conns []net.Conn` to AllowedClient
-// TODO (phase2) dynamic AllowedClient management
-// TODO (phase2) ping, like https://godoc.org/github.com/hashicorp/yamux#Session.Ping
-// TODO (phase2) stream compression Accept-Encoding <-> Content-Encoding
-// TODO (phase2) add monitoring hooks
-// TODO (phase2) add control message stringer
 
 type AllowedClient struct {
 	ID        id.ID

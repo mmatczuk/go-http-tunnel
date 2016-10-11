@@ -4,7 +4,7 @@ h2tun is fast and secure server/client package that enables proxying public conn
 
 It uses HTTP/2 protocol for data transport and connection multiplexing.
 
-h2tun can proxy:
+With h2tun you can proxy:
 
 * HTTP
 * TCP

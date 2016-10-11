@@ -22,10 +22,8 @@ type ClientConfig struct {
 	//
 	// If DialTLS is nil, tls.Dial is used.
 	DialTLS func(network, addr string, config *tls.Config) (net.Conn, error)
-
 	// Proxy specifies proxying rules.
 	Proxy ProxyFunc
-
 	// Log specifies the logger. If nil a default logging.Logger is used.
 	Log logging.Logger
 }
@@ -39,7 +37,6 @@ type Client struct {
 }
 
 func NewClient(config *ClientConfig) *Client {
-	// TODO (phase2) add validation
 	log := logging.NewLogger("client")
 	if config.Log != nil {
 		log = config.Log
