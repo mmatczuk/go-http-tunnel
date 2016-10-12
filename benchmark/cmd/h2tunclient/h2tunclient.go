@@ -5,10 +5,10 @@ import (
 	"crypto/x509"
 
 	"github.com/andrew-d/id"
-	"github.com/koding/h2tun"
-	"github.com/koding/h2tun/h2tuntest"
 	"github.com/koding/logging"
 	"github.com/koding/multiconfig"
+	"github.com/mmatczuk/h2tun"
+	"github.com/mmatczuk/h2tun/h2tuntest"
 )
 
 type config struct {

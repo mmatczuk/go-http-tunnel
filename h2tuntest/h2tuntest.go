@@ -15,9 +15,9 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/koding/h2tun"
-	"github.com/koding/h2tun/proto"
 	"github.com/koding/logging"
+	"github.com/mmatczuk/h2tun"
+	"github.com/mmatczuk/h2tun/proto"
 )
 
 // EchoProxyFunc pipes reader with writer.

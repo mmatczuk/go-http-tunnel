@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/koding/h2tun/proto"
 	"github.com/koding/logging"
+	"github.com/mmatczuk/h2tun/proto"
 	"golang.org/x/net/http2"
 )
 

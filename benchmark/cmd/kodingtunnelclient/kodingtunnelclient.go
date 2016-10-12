@@ -6,12 +6,12 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/koding/h2tun/h2tuntest"
-	h2tunproto "github.com/koding/h2tun/proto"
 	"github.com/koding/logging"
 	"github.com/koding/multiconfig"
 	"github.com/koding/tunnel"
 	"github.com/koding/tunnel/proto"
+	"github.com/mmatczuk/h2tun/h2tuntest"
+	h2tunproto "github.com/mmatczuk/h2tun/proto"
 )
 
 type config struct {

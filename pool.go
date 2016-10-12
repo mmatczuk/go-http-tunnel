@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	errNoClientConn = errors.New("no connection")
+	errNoClientConn           = errors.New("no connection")
 	errClientAlreadyConnected = errors.New("client already connected")
 )
 

@@ -11,17 +11,17 @@ import (
 	"time"
 
 	"github.com/andrew-d/id"
-	"github.com/koding/h2tun/proto"
 	"github.com/koding/logging"
+	"github.com/mmatczuk/h2tun/proto"
 	"golang.org/x/net/http2"
 )
 
 // AllowedClient specifies client entry points on server.
 type AllowedClient struct {
 	// ID is client TLS certificate ID.
-	ID        id.ID
+	ID id.ID
 	// Host is URL host name, http requests to that host will be routed to the client.
-	Host      string
+	Host string
 	// Listeners is a list of listeners, connections the listeners accept
 	// will be routed to the client.
 	Listeners []net.Listener
@@ -45,11 +45,11 @@ type ServerConfig struct {
 // Server is responsible for proxying public connections to the client over a
 // tunnel connection.
 type Server struct {
-	config *ServerConfig
+	config     *ServerConfig
 	listener   net.Listener
 	connPool   *connPool
 	httpClient *http.Client
-	log logging.Logger
+	log        logging.Logger
 }
 
 // NewServer creates a new Server.

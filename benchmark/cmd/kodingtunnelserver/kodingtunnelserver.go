@@ -6,10 +6,10 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/koding/h2tun/h2tuntest"
 	"github.com/koding/logging"
 	"github.com/koding/multiconfig"
 	"github.com/koding/tunnel"
+	"github.com/mmatczuk/h2tun/h2tuntest"
 	"golang.org/x/net/http2"
 )
 
