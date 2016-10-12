@@ -1,3 +1,8 @@
+### GO
+*.cov
+*.prof
+*.mprof
+
 ### IntelliJ
 .idea/
 *.iml

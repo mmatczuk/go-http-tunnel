@@ -33,8 +33,6 @@ This test compares performance on twenty minutes constant pressure runs. h2tun s
 
 Both implementations have a connection (or memory) leak when dealing with too high loads. This results in process (or machine) crash as machine runs out of memory. It's 100% reproducible, when process crashes it has few hundred thousands go routines waiting on select in a connection and memory full of connection buffers. 
 
-During the constant pressure tests it also happened that koding tunnel client crashed a (panic in yamux), that was never observed for h2tun.
-
 ![](constload.png)
 
 Detailed results of constant pressure test.
