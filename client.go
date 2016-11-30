@@ -1,4 +1,4 @@
-package h2tun
+package tunnel
 
 import (
 	"crypto/tls"
@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/koding/logging"
-	"github.com/mmatczuk/h2tun/proto"
+	"github.com/mmatczuk/tunnel/proto"
 	"golang.org/x/net/http2"
 )
 

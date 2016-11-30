@@ -1,4 +1,4 @@
-package h2tun
+package tunnel
 
 import (
 	"crypto/tls"
@@ -11,10 +11,10 @@ var emptyID [32]byte
 
 // peerID is modified https://github.com/andrew-d/ptls/blob/b89c7dcc94630a77f225a48befd3710144c7c10e/ptls.go#L81
 func peerID(conn *tls.Conn) (id.ID, error) {
-	// Try a TLS connection over the given connection.  We explicitly perform
+	// Try a TLS connection over the given connection. We explicitly perform
 	// the handshake, since we want to maintain the invariant that, if this
-	// function returns successfully, then the connection should be valid and
-	// verified.
+	// function returns successfully, then the connection should be valid
+	// and verified.
 	if err := conn.Handshake(); err != nil {
 		return emptyID, err
 	}

@@ -9,7 +9,7 @@ import (
 	"github.com/koding/logging"
 	"github.com/koding/multiconfig"
 	"github.com/koding/tunnel"
-	"github.com/mmatczuk/h2tun/h2tuntest"
+	"github.com/mmatczuk/tunnel/tunneltest"
 	"golang.org/x/net/http2"
 )
 
@@ -30,7 +30,7 @@ func main() {
 	logging.Info("Loaded config: %v", config)
 
 	if config.Debug {
-		h2tuntest.DebugLogging()
+		tunneltest.DebugLogging()
 	}
 
 	cert, err := tls.LoadX509KeyPair(config.TLSCertFile, config.TLSKeyFile)
@@ -66,7 +66,7 @@ func main() {
 	h2srv := &http.Server{
 		Addr:      config.HTTPS,
 		Handler:   s,
-		TLSConfig: h2tuntest.TLSConfig(cert),
+		TLSConfig: tunneltest.TLSConfig(cert),
 	}
 	http2.ConfigureServer(h2srv, &http2.Server{})
 	logging.Fatal("HTTP2: %s", h2srv.ListenAndServeTLS("", ""))

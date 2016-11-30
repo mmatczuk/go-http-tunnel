@@ -7,8 +7,8 @@ import (
 	"github.com/andrew-d/id"
 	"github.com/koding/logging"
 	"github.com/koding/multiconfig"
-	"github.com/mmatczuk/h2tun"
-	"github.com/mmatczuk/h2tun/h2tuntest"
+	"github.com/mmatczuk/tunnel"
+	"github.com/mmatczuk/tunnel/tunneltest"
 )
 
 type config struct {
@@ -27,7 +27,7 @@ func main() {
 	logging.Info("Loaded config: %v", config)
 
 	if config.Debug {
-		h2tuntest.DebugLogging()
+		tunneltest.DebugLogging()
 	}
 
 	cert, err := tls.LoadX509KeyPair(config.TLSCertFile, config.TLSKeyFile)
@@ -42,14 +42,14 @@ func main() {
 	b, _ := certID.MarshalText()
 	logging.Info("Client using cert %q", string(b))
 
-	p, err := h2tuntest.InMemoryFileServer(config.DataDir)
+	p, err := tunneltest.InMemoryFileServer(config.DataDir)
 	if err != nil {
 		logging.Fatal("Could not create proxy function: %s", err)
 	}
 
-	c := h2tun.NewClient(&h2tun.ClientConfig{
+	c := tunnel.NewClient(&tunnel.ClientConfig{
 		ServerAddr:      config.ServerAddr,
-		TLSClientConfig: h2tuntest.TLSConfig(cert),
+		TLSClientConfig: tunneltest.TLSConfig(cert),
 		Proxy:           p,
 	})
 	if err := c.Start(); err != nil {

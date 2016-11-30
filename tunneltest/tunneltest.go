@@ -1,6 +1,6 @@
-// Package h2tuntest contains common testing tools shared by unit tests,
+// Package tunneltest contains common testing tools shared by unit tests,
 // benchmarks and third party tests.
-package h2tuntest
+package tunneltest
 
 import (
 	"bufio"
@@ -16,8 +16,8 @@ import (
 	"path/filepath"
 
 	"github.com/koding/logging"
-	"github.com/mmatczuk/h2tun"
-	"github.com/mmatczuk/h2tun/proto"
+	"github.com/mmatczuk/tunnel"
+	"github.com/mmatczuk/tunnel/proto"
 )
 
 // EchoProxyFunc pipes reader with writer.
@@ -63,7 +63,7 @@ func EchoHTTPProxyFunc(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage) 
 // InMemoryFileServer scans directory dir, loads all files to memory and returns
 // a http ProxyFunc that maps URL paths to relative filesystem paths i.e. file
 // ./data/foo/bar.zip will be available under URL host:port/data/foo/bar.zip.
-func InMemoryFileServer(dir string) (h2tun.ProxyFunc, error) {
+func InMemoryFileServer(dir string) (tunnel.ProxyFunc, error) {
 	dir, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get directory absoute path %q: %s", dir, err)

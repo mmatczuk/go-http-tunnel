@@ -1,4 +1,4 @@
-package h2tun
+package tunnel
 
 import (
 	"bufio"
@@ -12,7 +12,7 @@ import (
 
 	"github.com/andrew-d/id"
 	"github.com/koding/logging"
-	"github.com/mmatczuk/h2tun/proto"
+	"github.com/mmatczuk/tunnel/proto"
 	"golang.org/x/net/http2"
 )
 

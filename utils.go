@@ -1,4 +1,4 @@
-package h2tun
+package tunnel
 
 import (
 	"fmt"
@@ -15,6 +15,7 @@ func url(host string) string {
 type closeWriter interface {
 	CloseWrite() error
 }
+
 type closeReader interface {
 	CloseRead() error
 }

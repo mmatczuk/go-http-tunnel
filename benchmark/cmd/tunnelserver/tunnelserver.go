@@ -7,8 +7,8 @@ import (
 	"github.com/andrew-d/id"
 	"github.com/koding/logging"
 	"github.com/koding/multiconfig"
-	"github.com/mmatczuk/h2tun"
-	"github.com/mmatczuk/h2tun/h2tuntest"
+	"github.com/mmatczuk/tunnel"
+	"github.com/mmatczuk/tunnel/tunneltest"
 	"golang.org/x/net/http2"
 )
 
@@ -30,7 +30,7 @@ func main() {
 	logging.Info("Loaded config: %v", config)
 
 	if config.Debug {
-		h2tuntest.DebugLogging()
+		tunneltest.DebugLogging()
 	}
 
 	cert, err := tls.LoadX509KeyPair(config.TLSCertFile, config.TLSKeyFile)
@@ -43,10 +43,10 @@ func main() {
 		logging.Fatal("Failed to parse client cert ID: %s", err)
 	}
 
-	s, err := h2tun.NewServer(&h2tun.ServerConfig{
+	s, err := tunnel.NewServer(&tunnel.ServerConfig{
 		Addr:           config.Addr,
-		TLSConfig:      h2tuntest.TLSConfig(cert),
-		AllowedClients: []*h2tun.AllowedClient{{ID: *clientID, Host: config.Host}},
+		TLSConfig:      tunneltest.TLSConfig(cert),
+		AllowedClients: []*tunnel.AllowedClient{{ID: *clientID, Host: config.Host}},
 	})
 	if err != nil {
 		logging.Fatal("Server creation failed: %s", err)
@@ -56,7 +56,7 @@ func main() {
 	h2srv := &http.Server{
 		Addr:      config.HTTPS,
 		Handler:   s,
-		TLSConfig: h2tuntest.TLSConfig(cert),
+		TLSConfig: tunneltest.TLSConfig(cert),
 	}
 	http2.ConfigureServer(h2srv, &http2.Server{})
 

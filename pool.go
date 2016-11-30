@@ -1,4 +1,4 @@
-package h2tun
+package tunnel
 
 import (
 	"errors"

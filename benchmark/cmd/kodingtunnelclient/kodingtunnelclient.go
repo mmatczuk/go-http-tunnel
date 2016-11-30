@@ -10,8 +10,8 @@ import (
 	"github.com/koding/multiconfig"
 	"github.com/koding/tunnel"
 	"github.com/koding/tunnel/proto"
-	"github.com/mmatczuk/h2tun/h2tuntest"
-	h2tunproto "github.com/mmatczuk/h2tun/proto"
+	"github.com/mmatczuk/tunnel/tunneltest"
+	tunnelproto "github.com/mmatczuk/tunnel/proto"
 )
 
 type config struct {
@@ -29,7 +29,7 @@ func main() {
 	logging.Info("Loaded config: %v", config)
 
 	if config.Debug {
-		h2tuntest.DebugLogging()
+		tunneltest.DebugLogging()
 	}
 
 	p, err := inMemoryFileServer(config.DataDir)
@@ -56,7 +56,7 @@ func main() {
 }
 
 func inMemoryFileServer(dir string) (tunnel.ProxyFunc, error) {
-	f, err := h2tuntest.InMemoryFileServer(dir)
+	f, err := tunneltest.InMemoryFileServer(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func inMemoryFileServer(dir string) (tunnel.ProxyFunc, error) {
 			logging.Error("Could not read request", err)
 		}
 
-		f(remote, remote, &h2tunproto.ControlMessage{
+		f(remote, remote, &tunnelproto.ControlMessage{
 			URLPath: r.URL.Path,
 		})
 	}, nil

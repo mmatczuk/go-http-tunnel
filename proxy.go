@@ -1,9 +1,9 @@
-package h2tun
+package tunnel
 
 import (
 	"io"
 
-	"github.com/mmatczuk/h2tun/proto"
+	"github.com/mmatczuk/tunnel/proto"
 )
 
 // ProxyFunc is responsible for forwarding a remote connection to local server

@@ -17,13 +17,13 @@ BENCHMARK_TLS_CERT_ID   ?= YMBKT3V-ESUTZ2Z-7MRILIJ-T35FHGO-D2DHO7D-FXMGSSR-V4LBS
 
 all: clean build
 
-build: h2tunserver h2tunclient kodingtunnelserver kodingtunnelclient hdr
+build: tunnelserver tunnelclient kodingtunnelserver kodingtunnelclient hdr
 
-h2tunserver:
-	go build ./cmd/h2tunserver
+tunnelserver:
+	go build ./cmd/tunnelserver
 
-h2tunclient:
-	go build ./cmd/h2tunclient
+tunnelclient:
+	go build ./cmd/tunnelclient
 
 kodingtunnelserver:
 	go build ./cmd/kodingtunnelserver
@@ -35,8 +35,8 @@ hdr:
 	go build ./cmd/hdr
 
 clean:
-	@rm -f h2tunserver
-	@rm -f h2tunclient
+	@rm -f tunnelserver
+	@rm -f tunnelclient
 	@rm -f kodingtunnelserver
 	@rm -f kodingtunnelclient
 	@rm -f hdr
@@ -45,8 +45,8 @@ clean:
 # Running #
 ###########
 
-run-h2tunserver: h2tunserver
-	@./h2tunserver \
+run-tunnelserver: tunnelserver
+	@./tunnelserver \
 	-https :${BENCHMARK_PORT} \
 	-addr ${BENCHMARK_ADDR} \
 	-host ${BENCHMARK_HOST} \
@@ -54,8 +54,8 @@ run-h2tunserver: h2tunserver
 	-tlscertfile ${BENCHMARK_TLS_CERT_FILE} \
 	-tlskeyfile ${BENCHMARK_TLS_KEY_FILE}
 
-run-h2tunclient: h2tunclient data
-	@./h2tunclient \
+run-tunnelclient: tunnelclient data
+	@./tunnelclient \
 	-serveraddr ${BENCHMARK_ADDR} \
 	-datadir data \
 	-tlscertfile ${BENCHMARK_TLS_CERT_FILE} \

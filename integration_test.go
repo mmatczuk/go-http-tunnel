@@ -1,6 +1,4 @@
-// Package h2tun_test implements integration test that ensures that client-server
-// connectivity works properly.
-package h2tun_test
+package tunnel_test
 
 import (
 	"bytes"
@@ -15,8 +13,8 @@ import (
 	"time"
 
 	"github.com/andrew-d/id"
-	"github.com/mmatczuk/h2tun"
-	"github.com/mmatczuk/h2tun/h2tuntest"
+	"github.com/mmatczuk/tunnel"
+	"github.com/mmatczuk/tunnel/tunneltest"
 )
 
 const (
@@ -46,10 +44,10 @@ func TestMain(m *testing.M) {
 	}
 	defer l.Close()
 
-	// prepare h2tun server
-	s, err := h2tun.NewServer(&h2tun.ServerConfig{
-		TLSConfig: h2tuntest.TLSConfig(cert),
-		AllowedClients: []*h2tun.AllowedClient{
+	// prepare tunnel server
+	s, err := tunnel.NewServer(&tunnel.ServerConfig{
+		TLSConfig: tunneltest.TLSConfig(cert),
+		AllowedClients: []*tunnel.AllowedClient{
 			{
 				ID:        id,
 				Host:      "foobar.com",
@@ -63,11 +61,11 @@ func TestMain(m *testing.M) {
 	s.Start()
 	defer s.Close()
 
-	// prepare h2tun client
-	c := h2tun.NewClient(&h2tun.ClientConfig{
+	// prepare tunnel client
+	c := tunnel.NewClient(&tunnel.ClientConfig{
 		ServerAddr:      s.Addr(),
-		TLSClientConfig: h2tuntest.TLSConfig(cert),
-		Proxy:           h2tuntest.EchoProxyFunc,
+		TLSClientConfig: tunneltest.TLSConfig(cert),
+		Proxy:           tunneltest.EchoProxyFunc,
 	})
 	if err := c.Start(); err != nil {
 		panic(err)
