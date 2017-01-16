@@ -14,6 +14,7 @@ addons:
 
 before_install:
   - go get -u github.com/golang/lint/golint
+  - go get -u github.com/golang/mock/gomock
 
 install:
   - go get -d ./...

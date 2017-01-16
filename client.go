@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/koding/logging"
 	"github.com/mmatczuk/tunnel/proto"
@@ -21,11 +22,26 @@ type ClientConfig struct {
 	// DialTLS specifies an optional dial function that creates a tls
 	// connection to the server. If DialTLS is nil, tls.Dial is used.
 	DialTLS func(network, addr string, config *tls.Config) (net.Conn, error)
+	// Backoff specifies wait before retry policy when server ch fails.
+	// If nil when ch fails it would immediately return error.
+	Backoff Backoff
 	// Proxy is ProxyFunc responsible for transferring data between server
 	// and local services.
 	Proxy ProxyFunc
 	// Log specifies the logger. If nil a default logging.Logger is used.
 	Log logging.Logger
+}
+
+// Backoff defines behavior of staggering reconnection retries.
+type Backoff interface {
+	// Next returns the duration to sleep before retrying to reconnect.
+	// If the returned value is negative, the retry is aborted.
+	NextBackOff() time.Duration
+
+	// Reset is used to signal a reconnection was successful and next
+	// call to Next should return desired time duration for 1st reconnection
+	// attempt.
+	Reset()
 }
 
 // Client is responsible for creating connection to the server, handling control
@@ -56,8 +72,9 @@ func NewClient(config *ClientConfig) *Client {
 	return c
 }
 
-// Start connects client to the server, it returns error if there is a dial error,
-// otherwise it spawns a new goroutine with http/2 server handling ControlMessages.
+// Start connects client to the server, it returns error if there is a dial
+// error, otherwise it spawns a new goroutine with http/2 server handling
+// ControlMessages.
 func (c *Client) Start() error {
 	c.connMu.Lock()
 	defer c.connMu.Unlock()
@@ -77,10 +94,33 @@ func (c *Client) Start() error {
 }
 
 func (c *Client) dial(network, addr string, config *tls.Config) (net.Conn, error) {
-	if c.config.DialTLS != nil {
-		return c.config.DialTLS(network, addr, config)
+	doDial := func() (net.Conn, error) {
+		if c.config.DialTLS != nil {
+			return c.config.DialTLS(network, addr, config)
+		}
+		return tls.Dial(network, addr, config)
 	}
-	return tls.Dial(network, addr, config)
+
+	b := c.config.Backoff
+	if b == nil {
+		return doDial()
+	}
+
+	for {
+		conn, err := doDial()
+		// success
+		if err == nil {
+			b.Reset()
+			return conn, err
+		}
+
+		d := b.NextBackOff()
+		// failure
+		if d < 0 {
+			return conn, fmt.Errorf("backoff limit exeded: %s", err)
+		}
+		time.Sleep(d)
+	}
 }
 
 func (c *Client) serveHTTP(w http.ResponseWriter, r *http.Request) {
