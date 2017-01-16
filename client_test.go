@@ -13,12 +13,12 @@ import (
 )
 
 func TestClient_Dial(t *testing.T) {
-	server := httptest.NewTLSServer(nil)
-	defer server.Close()
+	s := httptest.NewTLSServer(nil)
+	defer s.Close()
 
 	c := NewClient(&ClientConfig{})
 
-	addr := server.Listener.Addr().String()
+	addr := s.Listener.Addr().String()
 	conn, err := c.dial("tcp", addr, &tls.Config{
 		InsecureSkipVerify: true,
 	})

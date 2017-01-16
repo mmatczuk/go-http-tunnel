@@ -211,7 +211,7 @@ func (s *Server) listen(l net.Listener, client *AllowedClient) {
 			Action:       proto.RequestClientSession,
 			Protocol:     l.Addr().Network(),
 			ForwardedFor: conn.RemoteAddr().String(),
-			ForwardedBy:  conn.LocalAddr().String(),
+			ForwardedBy:  l.Addr().String(),
 		}
 
 		go func() {
