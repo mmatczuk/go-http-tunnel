@@ -1,4 +1,3 @@
-1. Connection exponential backoff on client
 1. `ClientState` changes channel, on both client and server
 1. WebSockets proxing
 1. UDP and IP proxing
