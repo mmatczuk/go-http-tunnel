@@ -9,73 +9,88 @@ import (
 	"github.com/mmatczuk/tunnel/proto"
 )
 
-var (
-	tpcLog = logging.NewLogger("tcp")
-)
-
 // TCPProxy forwards TCP streams.
 type TCPProxy struct {
-	// LocalAddr defines TCP address of the local server.
-	LocalAddr string
-	// LocalAddrMap specifies a mapping from ControlMessage.ForwardedBy port
-	// to local server. If port is not found then if LocalAddr is not empty
-	// it will be used as a default otherwise connection will be closed.
-	LocalAddrMap map[string]string
-	// Log specifies the logger. If nil a default logging.Logger is used.
+	// Log is the proxy logger.
 	Log logging.Logger
+	// localAddr specifies default TCP address of the local server.
+	localAddr string
+	// localAddrMap specifies mapping from ControlMessage ForwardedBy to
+	// local server address, keys may contain host and port, only host or
+	// only port. The order of precedence is the following
+	// * host and port
+	// * port
+	// * host
+	localAddrMap map[string]string
+}
+
+// NewTCPProxy creates new direct TCPProxy, everything will be proxied to
+// localAddr.
+func NewTCPProxy(localAddr string) *TCPProxy {
+	return &TCPProxy{
+		Log:       logging.NewLogger("tcpproxy"),
+		localAddr: localAddr,
+	}
+}
+
+// NewMultiTCPProxy creates a new dispatching TCPProxy, connections may go to
+// different backends based on localAddrMap, see TCPProxy localAddrMap docs for
+// more details.
+func NewMultiTCPProxy(localAddrMap map[string]string) *TCPProxy {
+	return &TCPProxy{
+		Log:          logging.NewLogger("tcpproxy"),
+		localAddrMap: localAddrMap,
+	}
 }
 
 // Proxy is a ProxyFunc.
 func (p *TCPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage) {
+	w = flushWriter{w}
+
 	if msg.Protocol != "tcp" {
 		panic(fmt.Sprintf("Expected proxy protocol, got %s", msg.Protocol))
 	}
 
-	var log = p.log()
-
-	_, port, err := net.SplitHostPort(msg.ForwardedBy)
-	if err != nil {
-		log.Error("Failed to parse input address: %s", err)
+	target := p.localAddrFor(msg.ForwardedBy)
+	if target == "" {
+		p.Log.Warning("Failed to get local address")
 		return
 	}
 
-	localAddr := p.localAddr(port)
-	if localAddr == "" {
-		log.Warning("Failed to get local address for port %q", port)
-		return
-	}
-
-	log.Debug("Dialing local server: %q", localAddr)
-	local, err := net.DialTimeout("tcp", localAddr, DefaultDialTimeout)
+	local, err := net.DialTimeout("tcp", target, DefaultDialTimeout)
 	if err != nil {
-		log.Error("Dialing local server %q failed: %s", localAddr, err)
+		p.Log.Error("Dialing local server %q failed: %s", target, err)
 		return
 	}
 
 	done := make(chan struct{})
 	go func() {
-		transfer("local to remote", local, r)
+		transfer("local to remote", w, local)
 		close(done)
 	}()
-	transfer("remote to local", w, local)
+	transfer("remote to local", local, r)
 }
 
-func (p *TCPProxy) localAddr(port string) string {
-	if p.LocalAddrMap == nil {
-		return p.LocalAddr
+func (p *TCPProxy) localAddrFor(hostPort string) string {
+	if p.localAddrMap == nil {
+		return p.localAddr
 	}
 
-	addr, ok := p.LocalAddrMap[port]
-	if !ok {
-		return p.LocalAddr
+	// try host and port
+	if addr := p.localAddrMap[hostPort]; addr != "" {
+		return addr
 	}
 
-	return addr
-}
-
-func (p *TCPProxy) log() logging.Logger {
-	if p.Log != nil {
-		return p.Log
+	// try port
+	host, port, _ := net.SplitHostPort(hostPort)
+	if addr := p.localAddrMap[port]; addr != "" {
+		return addr
 	}
-	return tpcLog
+
+	// try host
+	if addr := p.localAddrMap[host]; addr != "" {
+		return addr
+	}
+
+	return p.localAddr
 }

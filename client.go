@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	// DefaultDialTimeout specifies who long client should wait for server or
-	// local service connection.
+	// DefaultDialTimeout specifies how long client should wait for tunnel
+	// server or local service connection.
 	DefaultDialTimeout = 10 * time.Second
 )
 
@@ -142,7 +142,7 @@ func (c *Client) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.log.Debug("Start proxying %v", msg)
-	c.config.Proxy(flushWriter{w}, r.Body, msg)
+	c.config.Proxy(w, r.Body, msg)
 	c.log.Debug("Done proxying %v", msg)
 }
 

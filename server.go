@@ -1,7 +1,6 @@
 package tunnel
 
 import (
-	"bufio"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -135,7 +134,7 @@ func (s *Server) handleClient(conn net.Conn) {
 		goto reject
 	}
 
-	req, err = http.NewRequest(http.MethodConnect, url(client.Host), nil)
+	req, err = http.NewRequest(http.MethodConnect, clientURL(client.Host), nil)
 	if err != nil {
 		s.log.Error("Invalid host %q for client %q", client.Host, client.ID)
 		goto reject
@@ -227,7 +226,7 @@ func (s *Server) listen(l net.Listener, client *AllowedClient) {
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	msg := &proto.ControlMessage{
 		Action:       proto.RequestClientSession,
-		Protocol:     proto.HTTPProtocol,
+		Protocol:     proto.HTTP,
 		ForwardedFor: r.RemoteAddr,
 		ForwardedBy:  r.Host,
 		URLPath:      r.URL.Path,
@@ -255,7 +254,7 @@ func (s *Server) proxyHTTP(host string, w http.ResponseWriter, r *http.Request, 
 	defer pr.Close()
 	defer pw.Close()
 
-	req, err := http.NewRequest(http.MethodPut, url(host), pr)
+	req, err := http.NewRequest(http.MethodPut, clientURL(host), pr)
 	if err != nil {
 		return fmt.Errorf("request creation error: %s", err)
 	}
@@ -277,14 +276,10 @@ func (s *Server) proxyHTTP(host string, w http.ResponseWriter, r *http.Request, 
 		return fmt.Errorf("proxy request error: %s", err)
 	}
 
-	inner, err := http.ReadResponse(bufio.NewReader(resp.Body), r)
-	if err != nil {
-		return fmt.Errorf("reading response error: %s", err)
-	}
-	copyHeader(w.Header(), inner.Header)
-	w.WriteHeader(inner.StatusCode)
-	if inner.Body != nil {
-		transfer("remote to local", w, inner.Body)
+	copyHeader(w.Header(), resp.Header)
+	w.WriteHeader(resp.StatusCode)
+	if resp.Body != nil {
+		transfer("remote to local", w, resp.Body)
 	}
 
 	<-done
@@ -300,7 +295,7 @@ func (s *Server) proxyConn(host string, c net.Conn, msg *proto.ControlMessage) e
 	defer pr.Close()
 	defer pw.Close()
 
-	req, err := http.NewRequest(http.MethodPut, url(host), pr)
+	req, err := http.NewRequest(http.MethodPut, clientURL(host), pr)
 	if err != nil {
 		return fmt.Errorf("request creation error: %s", err)
 	}
