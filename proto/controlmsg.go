@@ -20,13 +20,15 @@ const (
 	ForwardedHeader = "Forwarded"
 )
 
-// Additional protocols, base protocols are net.Dial networks.
-//
 // Known networks are "tcp", "tcp4" (IPv4-only), "tcp6" (IPv6-only), "udp",
 // "udp4" (IPv4-only), "udp6" (IPv6-only), "ip", "ip4" (IPv4-only), "ip6" (IPv6-only),
 // "unix", "unixgram" and "unixpacket".
 const (
-	HTTPProtocol = "http"
+	HTTP = "http"
+	TCP  = "tcp"
+	TCP4 = "tcp4"
+	TCP6 = "tcp6"
+	UNIX = "unix"
 )
 
 // ControlMessage is sent from server to client to establish tunneled connection.

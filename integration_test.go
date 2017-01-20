@@ -5,10 +5,11 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
-	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -24,10 +25,10 @@ const (
 
 // testContext stores state shared between sub tests.
 type testContext struct {
-	// handler is entry point for HTTP tests.
-	handler http.Handler
-	// listener is entry point for TCP tests.
-	listener net.Listener
+	// httpAddr is address for HTTP tests.
+	httpAddr net.Addr
+	// listener is address for TCP tests.
+	tcpAddr net.Addr
 	// payload is pre generated random data.
 	payload [][]byte
 }
@@ -35,23 +36,22 @@ type testContext struct {
 var ctx testContext
 
 func TestMain(m *testing.M) {
-	cert, id := selfSignedCert()
-
-	// prepare TCP listener
-	l, err := net.Listen("tcp", ":0")
+	// prepare server TCP listener
+	serverTCPListener, err := net.Listen("tcp", ":0")
 	if err != nil {
 		panic(err)
 	}
-	defer l.Close()
+	defer serverTCPListener.Close()
 
 	// prepare tunnel server
+	cert, id := selfSignedCert()
 	s, err := tunnel.NewServer(&tunnel.ServerConfig{
 		TLSConfig: tunneltest.TLSConfig(cert),
 		AllowedClients: []*tunnel.AllowedClient{
 			{
 				ID:        id,
-				Host:      "foobar.com",
-				Listeners: []net.Listener{l},
+				Host:      "localhost",
+				Listeners: []net.Listener{serverTCPListener},
 			},
 		},
 	})
@@ -61,22 +61,65 @@ func TestMain(m *testing.M) {
 	s.Start()
 	defer s.Close()
 
+	// run server HTTP interface
+	serverHTTPListener, err := net.Listen("tcp", ":0")
+	if err != nil {
+		panic(err)
+	}
+	defer serverHTTPListener.Close()
+	go http.Serve(serverHTTPListener, s)
+
+	// prepare local TCP echo service
+	echoTCPListener, err := net.Listen("tcp", ":0")
+	if err != nil {
+		panic(err)
+	}
+	defer echoTCPListener.Close()
+	go tunneltest.EchoTCP(echoTCPListener)
+
+	// prepare local HTTP echo service
+	echoHTTPListener, err := net.Listen("tcp", ":0")
+	if err != nil {
+		panic(err)
+	}
+	defer echoHTTPListener.Close()
+	go tunneltest.EchoHTTP(echoHTTPListener)
+
+	// prepare proxy
+	httpproxy := tunnel.NewMultiHTTPProxy(map[string]*url.URL{
+		"localhost:" + port(serverHTTPListener.Addr()): {
+			Scheme: "http",
+			Host:   echoHTTPListener.Addr().String(),
+		},
+	})
+	tcpproxy := tunnel.NewMultiTCPProxy(map[string]string{
+		port(serverTCPListener.Addr()): echoTCPListener.Addr().String(),
+	})
+	proxy := tunnel.Proxy(tunnel.ProxyFuncs{
+		HTTP: httpproxy.Proxy,
+		TCP:  tcpproxy.Proxy,
+	})
+
 	// prepare tunnel client
 	c := tunnel.NewClient(&tunnel.ClientConfig{
 		ServerAddr:      s.Addr(),
 		TLSClientConfig: tunneltest.TLSConfig(cert),
-		Proxy:           tunneltest.EchoProxyFunc,
+		Proxy:           proxy,
 	})
 	if err := c.Start(); err != nil {
 		panic(err)
 	}
 	defer c.Stop()
 
-	ctx.handler = s
-	ctx.listener = l
+	ctx.httpAddr = serverHTTPListener.Addr()
+	ctx.tcpAddr = serverTCPListener.Addr()
 	ctx.payload = randPayload(payloadInitialSize, payloadLen)
 
 	m.Run()
+}
+
+func port(addr net.Addr) string {
+	return fmt.Sprint(addr.(*net.TCPAddr).Port)
 }
 
 func randPayload(initialSize, n int) [][]byte {
@@ -107,12 +150,12 @@ func TestProxying(t *testing.T) {
 		name     string
 		seq      []uint
 	}{
-		{"http", "small", []uint{100, 80, 60, 40, 20, 10}},
-		{"http", "mid", []uint{20, 40, 60, 80, 100}},
-		{"http", "big", []uint{0, 0, 0, 0, 0, 0, 0, 0, 0, 100}},
-		{"tcp", "small", []uint{100, 80, 60, 40, 20, 10}},
-		{"tcp", "mid", []uint{20, 40, 60, 80, 100}},
-		{"tcp", "big", []uint{0, 0, 0, 0, 0, 0, 0, 0, 0, 100}},
+		{"http", "small", []uint{200, 160, 120, 80, 40, 20}},
+		{"http", "mid", []uint{40, 80, 120, 160, 200}},
+		{"http", "big", []uint{0, 0, 0, 0, 0, 0, 0, 0, 0, 200}},
+		{"tcp", "small", []uint{200, 160, 120, 80, 40, 20}},
+		{"tcp", "mid", []uint{40, 80, 120, 160, 200}},
+		{"tcp", "big", []uint{0, 0, 0, 0, 0, 0, 0, 0, 0, 200}},
 	}
 
 	for _, tt := range data {
@@ -133,24 +176,30 @@ func TestProxying(t *testing.T) {
 }
 
 func testHTTP(t *testing.T, seq []uint) {
-	var buf = bytes.NewBuffer(bigBuffer())
 	for idx, s := range seq {
 		for s > 0 {
-			r, err := http.NewRequest(http.MethodPost, "http://foobar.com/some/path", bytes.NewReader(ctx.payload[idx]))
+			url := fmt.Sprintf("http://localhost:%s/some/path", port(ctx.httpAddr))
+			r, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(ctx.payload[idx]))
 			if err != nil {
 				panic("Failed to create request")
 			}
-			buf.Reset()
-			w := &httptest.ResponseRecorder{
-				HeaderMap: make(http.Header),
-				Body:      buf,
-				Code:      200,
+			resp, err := http.DefaultClient.Do(r)
+			if err != nil {
+				panic(fmt.Sprintf("HTTP error %s", err))
 			}
-			ctx.handler.ServeHTTP(w, r)
-			if w.Code != http.StatusOK {
-				t.Error("Unexpected status code", w)
+			if resp.StatusCode != http.StatusOK {
+				t.Error("Unexpected status code", resp)
 			}
-			n, m := w.Body.Len(), len(ctx.payload[idx])
+			if resp.Body == nil {
+				t.Error("No body")
+			}
+
+			b, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				t.Error("Read error")
+			}
+
+			n, m := len(b), len(ctx.payload[idx])
 			if n != m {
 				t.Log("Read mismatch", n, m)
 			}
@@ -160,7 +209,7 @@ func testHTTP(t *testing.T, seq []uint) {
 }
 
 func testTCP(t *testing.T, seq []uint) {
-	conn, err := net.Dial("tcp", ctx.listener.Addr().String())
+	conn, err := net.Dial("tcp", ctx.tcpAddr.String())
 	if err != nil {
 		t.Fatal("Dial failed", err)
 	}

@@ -8,7 +8,7 @@ import (
 	"github.com/koding/logging"
 )
 
-func url(host string) string {
+func clientURL(host string) string {
 	return fmt.Sprint("https://", host)
 }
 

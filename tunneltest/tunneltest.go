@@ -3,13 +3,13 @@
 package tunneltest
 
 import (
-	"bufio"
 	"bytes"
 	"crypto/tls"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"mime"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -20,44 +20,32 @@ import (
 	"github.com/mmatczuk/tunnel/proto"
 )
 
-// EchoProxyFunc pipes reader with writer.
-func EchoProxyFunc(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage) {
-	switch msg.Protocol {
-	case proto.HTTPProtocol:
-		EchoHTTPProxyFunc(w, r, msg)
-	default:
-		io.Copy(w, r)
-	}
+// EchoHTTP starts serving HTTP requests on listener l, it accepts connections,
+// reads request body and writes is back in response.
+func EchoHTTP(l net.Listener) {
+	http.Serve(l, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		if r.Body != nil {
+			body, err := ioutil.ReadAll(r.Body)
+			if err != nil {
+				panic(err)
+			}
+			w.Write(body)
+		}
+	}))
 }
 
-// EchoHTTPProxyFunc is a special case of EchoProxyFunc that handles HTTP
-// request response model.
-func EchoHTTPProxyFunc(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage) {
-	req, err := http.ReadRequest(bufio.NewReader(r))
-	if err != nil {
-		panic(err)
-	}
-
-	resp := &http.Response{
-		Status:     "200 OK",
-		StatusCode: 200,
-		Proto:      "HTTP/1.0",
-		ProtoMajor: 1,
-		ProtoMinor: 0,
-		Request:    req,
-		Header:     make(http.Header),
-	}
-
-	if req.Body != nil {
-		body, err := ioutil.ReadAll(req.Body)
+// EchoTCP accepts connections and copies back received bytes.
+func EchoTCP(l net.Listener) {
+	for {
+		conn, err := l.Accept()
 		if err != nil {
-			panic(err)
+			return
 		}
-		resp.ContentLength = int64(len(body))
-		resp.Body = ioutil.NopCloser(bytes.NewReader(body))
+		go func() {
+			io.Copy(conn, conn)
+		}()
 	}
-
-	resp.Write(w)
 }
 
 // InMemoryFileServer scans directory dir, loads all files to memory and returns

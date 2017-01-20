@@ -13,6 +13,12 @@ import (
 	"golang.org/x/net/http2"
 )
 
+var (
+	// DefaultDialTimeout specifies how long client should wait for tunnel
+	// server or local service connection.
+	DefaultDialTimeout = 10 * time.Second
+)
+
 // ClientConfig defines configuration for the Client.
 type ClientConfig struct {
 	// ServerAddr specifies TCP address of the tunnel server.
@@ -98,7 +104,7 @@ func (c *Client) dial(network, addr string, config *tls.Config) (net.Conn, error
 		if c.config.DialTLS != nil {
 			return c.config.DialTLS(network, addr, config)
 		}
-		return tls.Dial(network, addr, config)
+		return tls.DialWithDialer(&net.Dialer{Timeout: DefaultDialTimeout}, network, addr, config)
 	}
 
 	b := c.config.Backoff
@@ -136,7 +142,7 @@ func (c *Client) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.log.Debug("Start proxying %v", msg)
-	c.config.Proxy(flushWriter{w}, r.Body, msg)
+	c.config.Proxy(w, r.Body, msg)
 	c.log.Debug("Done proxying %v", msg)
 }
 
