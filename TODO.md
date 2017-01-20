@@ -9,4 +9,3 @@
 1. `ControlMessage` `String()` function for better logging
 1. Use of `sync.Pool` to avoid allocations of `ControlMessage`
 1. Client and server commands (hcl configuration?)
-1. Server as RoundTripper

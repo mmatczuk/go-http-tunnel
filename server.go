@@ -222,34 +222,7 @@ func (s *Server) listen(l net.Listener, client *AllowedClient) {
 	}
 }
 
-// ServeHTTP proxies http connection to the client.
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	msg := &proto.ControlMessage{
-		Action:       proto.RequestClientSession,
-		Protocol:     proto.HTTP,
-		ForwardedFor: r.RemoteAddr,
-		ForwardedBy:  r.Host,
-		URLPath:      r.URL.Path,
-	}
-
-	err := s.proxyHTTP(trimPort(r.Host), w, r, msg)
-	if err != nil {
-		s.log.Warning("Error %s: %s", msg, err)
-		http.Error(w, err.Error(), http.StatusBadGateway)
-	}
-}
-
-func trimPort(hostPort string) (host string) {
-	host, _, _ = net.SplitHostPort(hostPort)
-	if host == "" {
-		host = hostPort
-	}
-	return
-}
-
-func (s *Server) proxyHTTP(host string, w http.ResponseWriter, r *http.Request, msg *proto.ControlMessage) error {
-	s.log.Debug("Start %s", msg)
-
+func (s *Server) proxyConn(host string, conn net.Conn, msg *proto.ControlMessage) error {
 	pr, pw := io.Pipe()
 	defer pr.Close()
 	defer pw.Close()
@@ -260,20 +233,23 @@ func (s *Server) proxyHTTP(host string, w http.ResponseWriter, r *http.Request, 
 	}
 	msg.WriteTo(req.Header)
 
-	done := make(chan struct{})
-	go func() {
-		cw := &countWriter{pw, 0}
-		err := r.Write(cw)
-		if err != nil {
-			s.log.Debug("Write to pipe failed: %s", err)
-		}
-		TransferLog.Debug("Coppied %d bytes from %s", cw.count, "local to remote")
-		close(done)
-	}()
+	go transfer("local to remote", pw, conn)
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("proxy request error: %s", err)
+	}
+
+	transfer("remote to local", conn, resp.Body)
+
+	return nil
+}
+
+// ServeHTTP proxies http connection to the client.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	resp, err := s.RoundTrip(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
 	}
 
 	copyHeader(w.Header(), resp.Header)
@@ -281,42 +257,49 @@ func (s *Server) proxyHTTP(host string, w http.ResponseWriter, r *http.Request, 
 	if resp.Body != nil {
 		transfer("remote to local", w, resp.Body)
 	}
-
-	<-done
-	s.log.Debug("Done %s", msg)
-	return nil
 }
 
-func (s *Server) proxyConn(host string, c net.Conn, msg *proto.ControlMessage) error {
-	s.log.Debug("Start %s", msg)
-	defer c.Close()
+// RoundTrip is http.RoundTriper implementation.
+func (s *Server) RoundTrip(r *http.Request) (*http.Response, error) {
+	msg := &proto.ControlMessage{
+		Action:       proto.RequestClientSession,
+		Protocol:     proto.HTTP,
+		ForwardedFor: r.RemoteAddr,
+		ForwardedBy:  r.Host,
+		URLPath:      r.URL.Path,
+	}
+	return s.proxyHTTP(trimPort(r.Host), r, msg)
+}
 
+func (s *Server) proxyHTTP(host string, r *http.Request, msg *proto.ControlMessage) (*http.Response, error) {
 	pr, pw := io.Pipe()
 	defer pr.Close()
 	defer pw.Close()
 
 	req, err := http.NewRequest(http.MethodPut, clientURL(host), pr)
 	if err != nil {
-		return fmt.Errorf("request creation error: %s", err)
+		return nil, fmt.Errorf("request creation error: %s", err)
 	}
 	msg.WriteTo(req.Header)
 
-	done := make(chan struct{})
 	go func() {
-		transfer("local to remote", pw, c)
-		close(done)
+		cw := &countWriter{pw, 0}
+		err := r.Write(cw)
+		if err != nil {
+			s.log.Error("Write to pipe failed: %s", err)
+		}
+		TransferLog.Debug("Coppied %d bytes from %s", cw.count, "local to remote")
+		if r.Body != nil {
+			r.Body.Close()
+		}
 	}()
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("proxy request error: %s", err)
+		return nil, fmt.Errorf("proxy request error: %s", err)
 	}
 
-	transfer("remote to local", c, resp.Body)
-
-	<-done
-	s.log.Debug("Done %s", msg)
-	return nil
+	return resp, nil
 }
 
 // Addr returns network address clients connect to.
