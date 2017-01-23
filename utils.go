@@ -7,7 +7,21 @@ import (
 	"net/http"
 
 	"github.com/koding/logging"
+	"github.com/mmatczuk/tunnel/proto"
 )
+
+func proxyRequest(host string, msg *proto.ControlMessage, r io.Reader) *http.Request {
+	if msg.Action != proto.Proxy {
+		panic("Invalid action")
+	}
+	req, err := http.NewRequest(http.MethodPut, clientURL(host), r)
+	if err != nil {
+		panic(fmt.Sprintf("Could not create request: %s", err))
+	}
+	msg.Update(req.Header)
+
+	return req
+}
 
 func clientURL(host string) string {
 	return fmt.Sprint("https://", host)

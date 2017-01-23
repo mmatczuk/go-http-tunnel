@@ -81,7 +81,6 @@ func (p *HTTPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessag
 		return
 	}
 	req.URL.Host = msg.ForwardedBy
-	req.URL.Path = msg.URLPath
 
 	p.ServeHTTP(rw, req)
 }
