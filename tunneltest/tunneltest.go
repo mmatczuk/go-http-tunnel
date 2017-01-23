@@ -13,8 +13,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-
-	"github.com/koding/logging"
 )
 
 // EchoHTTP starts serving HTTP requests on listener l, it accepts connections,
@@ -92,10 +90,4 @@ func TLSConfig(cert tls.Certificate) *tls.Config {
 	}
 	c.BuildNameToCertificate()
 	return c
-}
-
-// DebugLogging makes koding logger print debug messages.
-func DebugLogging() {
-	logging.DefaultLevel = logging.DEBUG
-	logging.DefaultHandler.SetLevel(logging.DEBUG)
 }

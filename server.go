@@ -9,10 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andrew-d/id"
-	"github.com/koding/logging"
-	"github.com/mmatczuk/tunnel/proto"
 	"golang.org/x/net/http2"
+
+	"github.com/andrew-d/id"
+	"github.com/mmatczuk/tunnel/log"
+	"github.com/mmatczuk/tunnel/proto"
 )
 
 // AllowedClient specifies client entry points on server.
@@ -37,8 +38,8 @@ type ServerConfig struct {
 	Listener net.Listener
 	// AllowedClients specifies clients that can connect to the server.
 	AllowedClients []*AllowedClient
-	// Log specifies the logger. If nil a default logging.Logger is used.
-	Log logging.Logger
+	// Logger is optional logger. If nil no logs will be printed.
+	Logger log.Logger
 }
 
 // Server is responsible for proxying public connections to the client over a
@@ -48,31 +49,31 @@ type Server struct {
 	listener   net.Listener
 	connPool   *connPool
 	httpClient *http.Client
-	log        logging.Logger
+	logger     log.Logger
 }
 
 // NewServer creates a new Server.
 func NewServer(config *ServerConfig) (*Server, error) {
-	l, err := listener(config)
+	listener, err := listener(config)
 	if err != nil {
 		return nil, fmt.Errorf("tls listener failed :%s", err)
 	}
 
 	t := &http2.Transport{}
-	p := newConnPool(t)
-	t.ConnPool = p
+	pool := newConnPool(t)
+	t.ConnPool = pool
 
-	log := logging.NewLogger("server")
-	if config.Log != nil {
-		log = config.Log
+	logger := config.Logger
+	if logger == nil {
+		logger = log.NewNopLogger()
 	}
 
 	return &Server{
 		config:     config,
-		listener:   l,
-		connPool:   p,
+		listener:   listener,
+		connPool:   pool,
 		httpClient: &http.Client{Transport: t},
-		log:        log,
+		logger:     logger,
 	}, nil
 }
 
@@ -81,17 +82,24 @@ func listener(config *ServerConfig) (net.Listener, error) {
 		return config.Listener, nil
 	}
 
-	addr := ":0"
-	if config.Addr != "" {
-		addr = config.Addr
+	if config.Addr == "" {
+		panic("Missing Addr")
+	}
+	if config.TLSConfig == nil {
+		panic("Missing TLSConfig")
 	}
 
-	return tls.Listen("tcp", addr, config.TLSConfig)
+	return tls.Listen("tcp", config.Addr, config.TLSConfig)
 }
 
 // Start starts accepting connections form clients and allowed clients listeners.
 // For accepting http traffic one must run server as a handler to http server.
 func (s *Server) Start() {
+	s.logger.Log(
+		"level", 1,
+		"action", "start",
+		"addr", s.listener.Addr(),
+	)
 	go s.listenControl()
 	s.listenClientListeners()
 }
@@ -100,21 +108,31 @@ func (s *Server) listenControl() {
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
-			s.log.Warning("Accept %s control connection to %q failed: %s",
-				s.listener.Addr().Network(), s.listener.Addr().String(), err)
+			s.logger.Log(
+				"level", 2,
+				"msg", "accept control connection failed",
+				"err", err,
+			)
 			if strings.Contains(err.Error(), "use of closed network connection") {
 				return
 			}
 			continue
 		}
-		s.log.Info("Accepted %s control connection from %q to %q",
-			s.listener.Addr().Network(), conn.RemoteAddr(), s.listener.Addr().String())
+
 		go s.handleClient(conn)
 	}
 }
 
 func (s *Server) handleClient(conn net.Conn) {
+	logger := log.NewContext(s.logger).With("addr", conn.RemoteAddr())
+
+	logger.Log(
+		"level", 1,
+		"action", "try connect",
+	)
+
 	var (
+		id     id.ID
 		client *AllowedClient
 		req    *http.Request
 		resp   *http.Response
@@ -122,49 +140,98 @@ func (s *Server) handleClient(conn net.Conn) {
 		ok     bool
 	)
 
-	id, err := peerID(conn.(*tls.Conn))
-	if err != nil {
-		s.log.Warning("Certificate error: %s", err)
+	tlsConn, ok := conn.(*tls.Conn)
+	if !ok {
+		logger.Log(
+			"level", 0,
+			"msg", "invalid connection type",
+			"err", fmt.Errorf("expected tls conn, got %T", conn),
+		)
 		goto reject
 	}
 
+	id, err = peerID(tlsConn)
+	if err != nil {
+		logger.Log(
+			"level", 2,
+			"msg", "certificate error",
+			"err", err,
+		)
+		goto reject
+	}
+
+	logger = logger.With("id", id)
+
 	client, ok = s.checkID(id)
 	if !ok {
-		s.log.Warning("Unknown certificate: %q", id.String())
+		logger.Log(
+			"level", 2,
+			"msg", "unknown certificate",
+		)
 		goto reject
 	}
 
 	req, err = http.NewRequest(http.MethodConnect, clientURL(client.Host), nil)
 	if err != nil {
-		s.log.Error("Invalid host %q for client %q", client.Host, client.ID)
+		logger.Log(
+			"level", 2,
+			"msg", "handshake request creation failed",
+			"err", err,
+		)
 		goto reject
 	}
 
 	if err = conn.SetDeadline(time.Time{}); err != nil {
-		s.log.Warning("Setting no deadline failed: %s", err)
+		logger.Log(
+			"level", 2,
+			"msg", "setting infinite deadline failed",
+			"err", err,
+		)
 		// recoverable
 	}
 
 	if err := s.connPool.addHostConn(client.Host, conn); err != nil {
-		s.log.Warning("Could not add host: %s", err)
+		logger.Log(
+			"level", 2,
+			"msg", "adding host failed",
+			"host", client.Host,
+			"err", err,
+		)
 		goto reject
 	}
 
 	resp, err = s.httpClient.Do(req)
 	if err != nil {
-		s.log.Warning("Handshake failed %s", err)
+		logger.Log(
+			"level", 2,
+			"msg", "handshake failed",
+			"err", err,
+		)
 		goto reject
 	}
 	if resp.StatusCode != http.StatusOK {
-		s.log.Warning("Handshake failed")
+		logger.Log(
+			"level", 2,
+			"msg", "handshake failed",
+			"err", fmt.Errorf("Status %s", resp.Status),
+		)
 		goto reject
 	}
 
-	s.log.Info("Connected to client %s (%q)", conn.RemoteAddr(), client.ID)
+	logger.Log(
+		"level", 1,
+		"action", "connected",
+	)
 
 	return
 
 reject:
+	s.logger.Log(
+		"level", 1,
+		"action", "rejected",
+		"addr", conn.RemoteAddr(),
+	)
+
 	conn.Close()
 	if client != nil {
 		s.connPool.markHostDead(client.Host)
@@ -196,15 +263,16 @@ func (s *Server) listen(l net.Listener, client *AllowedClient) {
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			s.log.Warning("Accept %s connection to %q failed: %s",
-				s.listener.Addr().Network(), s.listener.Addr().String(), err)
+			s.logger.Log(
+				"level", 2,
+				"msg", "accept connection failed",
+				"err", err,
+			)
 			if strings.Contains(err.Error(), "use of closed network connection") {
 				return
 			}
 			continue
 		}
-		s.log.Debug("Accepted %s connection from %q to %q",
-			l.Addr().Network(), conn.RemoteAddr(), l.Addr().String())
 
 		msg := &proto.ControlMessage{
 			Action:       proto.Proxy,
@@ -212,33 +280,46 @@ func (s *Server) listen(l net.Listener, client *AllowedClient) {
 			ForwardedFor: conn.RemoteAddr().String(),
 			ForwardedBy:  l.Addr().String(),
 		}
-
-		go func() {
-			err := s.proxyConn(client.Host, conn, msg)
-			if err != nil {
-				s.log.Warning("Error %s: %s", msg, err)
-			}
-		}()
+		go s.proxyConn(client.Host, conn, msg)
 	}
 }
 
-func (s *Server) proxyConn(host string, conn net.Conn, msg *proto.ControlMessage) error {
+func (s *Server) proxyConn(host string, conn net.Conn, msg *proto.ControlMessage) {
+	s.logger.Log(
+		"level", 2,
+		"action", "proxy",
+		"ctrlMsg", msg,
+	)
+
 	pr, pw := io.Pipe()
 	defer pr.Close()
 	defer pw.Close()
 
-	req := proxyRequest(host, msg, pr)
+	req := clientRequest(host, msg, pr)
 
-	go transfer("local to remote", pw, conn)
+	go transfer(pw, conn, log.NewContext(s.logger).With(
+		"dir", "user to client",
+		"dst", host,
+		"src", conn.RemoteAddr(),
+	))
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("proxy request error: %s", err)
+		s.logger.Log(
+			"level", 0,
+			"msg", "proxy error",
+			"ctrlMsg", msg,
+			"err", err,
+		)
+		conn.Close()
+		return
 	}
 
-	transfer("remote to local", conn, resp.Body)
-
-	return nil
+	transfer(conn, resp.Body, log.NewContext(s.logger).With(
+		"dir", "client to user",
+		"dst", conn.RemoteAddr(),
+		"src", host,
+	))
 }
 
 // ServeHTTP proxies http connection to the client.
@@ -251,7 +332,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	copyHeader(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 	if resp.Body != nil {
-		transfer("remote to local", w, resp.Body)
+		transfer(w, resp.Body, log.NewContext(s.logger).With(
+			"dir", "client to user",
+			"dst", r.RemoteAddr,
+			"src", r.Host,
+		))
 	}
 }
 
@@ -267,19 +352,39 @@ func (s *Server) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 
 func (s *Server) proxyHTTP(host string, r *http.Request, msg *proto.ControlMessage) (*http.Response, error) {
+	s.logger.Log(
+		"level", 2,
+		"action", "proxy",
+		"ctrlMsg", msg,
+	)
+
 	pr, pw := io.Pipe()
 	defer pr.Close()
 	defer pw.Close()
 
-	req := proxyRequest(host, msg, pr)
+	req := clientRequest(host, msg, pr)
 
 	go func() {
 		cw := &countWriter{pw, 0}
 		err := r.Write(cw)
 		if err != nil {
-			s.log.Error("Write to pipe failed: %s", err)
+			s.logger.Log(
+				"level", 0,
+				"msg", "proxy error",
+				"ctrlMsg", msg,
+				"err", err,
+			)
 		}
-		TransferLog.Debug("Coppied %d bytes from %s", cw.count, "local to remote")
+
+		s.logger.Log(
+			"level", 3,
+			"action", "transfered",
+			"bytes", cw.count,
+			"dir", "user to client",
+			"dst", r.Host,
+			"src", r.RemoteAddr,
+		)
+
 		if r.Body != nil {
 			r.Body.Close()
 		}
@@ -301,11 +406,14 @@ func (s *Server) Addr() string {
 	return s.listener.Addr().String()
 }
 
-// Close closes the server.
-func (s *Server) Close() error {
-	if s.listener == nil {
-		return nil
-	}
+// Stop closes the server.
+func (s *Server) Stop() {
+	s.logger.Log(
+		"level", 1,
+		"action", "stop",
+	)
 
-	return s.listener.Close()
+	if s.listener != nil {
+		s.listener.Close()
+	}
 }

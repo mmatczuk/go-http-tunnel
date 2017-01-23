@@ -40,10 +40,6 @@ type ControlMessage struct {
 	ForwardedBy  string
 }
 
-func (c *ControlMessage) String() string {
-	return fmt.Sprintf("%s %s: %s<-%s", c.Action, c.Protocol, c.ForwardedBy, c.ForwardedFor)
-}
-
 var xffRegexp = regexp.MustCompile("(for|proto|by)=([^;$]+)")
 
 // ParseControlMessage creates new ControlMessage based on "Forwarded" http
