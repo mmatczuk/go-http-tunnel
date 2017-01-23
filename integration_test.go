@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	payloadInitialSize = 32
+	payloadInitialSize = 512
 	payloadLen         = 10
 )
 
@@ -201,7 +201,7 @@ func testHTTP(t *testing.T, seq []uint) {
 
 			n, m := len(b), len(ctx.payload[idx])
 			if n != m {
-				t.Log("Read mismatch", n, m)
+				t.Error("Read mismatch", n, m)
 			}
 			s--
 		}

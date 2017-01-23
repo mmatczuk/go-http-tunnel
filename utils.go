@@ -3,6 +3,7 @@ package tunnel
 import (
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 
 	"github.com/koding/logging"
@@ -10,6 +11,14 @@ import (
 
 func clientURL(host string) string {
 	return fmt.Sprint("https://", host)
+}
+
+func trimPort(hostPort string) (host string) {
+	host, _, _ = net.SplitHostPort(hostPort)
+	if host == "" {
+		host = hostPort
+	}
+	return
 }
 
 type closeWriter interface {
