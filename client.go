@@ -131,19 +131,27 @@ func (c *Client) dial(network, addr string, config *tls.Config) (net.Conn, error
 
 func (c *Client) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodConnect {
-		c.log.Info("Handshake: hello from server")
+		c.log.Info("Connected to server: %s", r.RemoteAddr)
 		http.Error(w, "Nice to see you", http.StatusOK)
 		return
 	}
 
 	msg, err := proto.ParseControlMessage(r.Header)
 	if err != nil {
+		c.log.Warning("Parsing control message failed: %s", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	c.log.Debug("Start proxying %v", msg)
-	c.config.Proxy(w, r.Body, msg)
-	c.log.Debug("Done proxying %v", msg)
+
+	c.log.Debug("Start %s", msg)
+	switch msg.Action {
+	case proto.Proxy:
+		c.config.Proxy(w, r.Body, msg)
+	default:
+		c.log.Warning("Unknown action: %s", msg)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+	c.log.Debug("Done %s", msg)
 }
 
 // Stop closes the connection between client and server. After stopping client

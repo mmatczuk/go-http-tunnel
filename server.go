@@ -160,7 +160,7 @@ func (s *Server) handleClient(conn net.Conn) {
 		goto reject
 	}
 
-	s.log.Info("Client %q connected from %q", client.ID, conn.RemoteAddr().String())
+	s.log.Info("Connected to client %s (%q)", conn.RemoteAddr(), client.ID)
 
 	return
 
@@ -207,7 +207,7 @@ func (s *Server) listen(l net.Listener, client *AllowedClient) {
 			l.Addr().Network(), conn.RemoteAddr(), l.Addr().String())
 
 		msg := &proto.ControlMessage{
-			Action:       proto.RequestClientSession,
+			Action:       proto.Proxy,
 			Protocol:     l.Addr().Network(),
 			ForwardedFor: conn.RemoteAddr().String(),
 			ForwardedBy:  l.Addr().String(),
@@ -227,11 +227,7 @@ func (s *Server) proxyConn(host string, conn net.Conn, msg *proto.ControlMessage
 	defer pr.Close()
 	defer pw.Close()
 
-	req, err := http.NewRequest(http.MethodPut, clientURL(host), pr)
-	if err != nil {
-		return fmt.Errorf("request creation error: %s", err)
-	}
-	msg.WriteTo(req.Header)
+	req := proxyRequest(host, msg, pr)
 
 	go transfer("local to remote", pw, conn)
 
@@ -262,11 +258,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // RoundTrip is http.RoundTriper implementation.
 func (s *Server) RoundTrip(r *http.Request) (*http.Response, error) {
 	msg := &proto.ControlMessage{
-		Action:       proto.RequestClientSession,
+		Action:       proto.Proxy,
 		Protocol:     proto.HTTP,
 		ForwardedFor: r.RemoteAddr,
 		ForwardedBy:  r.Host,
-		URLPath:      r.URL.Path,
 	}
 	return s.proxyHTTP(trimPort(r.Host), r, msg)
 }
@@ -276,11 +271,7 @@ func (s *Server) proxyHTTP(host string, r *http.Request, msg *proto.ControlMessa
 	defer pr.Close()
 	defer pw.Close()
 
-	req, err := http.NewRequest(http.MethodPut, clientURL(host), pr)
-	if err != nil {
-		return nil, fmt.Errorf("request creation error: %s", err)
-	}
-	msg.WriteTo(req.Header)
+	req := proxyRequest(host, msg, pr)
 
 	go func() {
 		cw := &countWriter{pw, 0}

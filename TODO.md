@@ -1,4 +1,3 @@
-1. `ControlMessage` `String()` function for better logging
 1. Dynamic `AllowedClient` management
 1. Client driven configuration, on connect client sends it's configuration, server just needs to know the certificate id
 1. Cli and file configuration https://ngrok.com/docs#config

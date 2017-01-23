@@ -11,11 +11,10 @@ func TestControlMessage_WriteParse(t *testing.T) {
 		Protocol:     "tcp",
 		ForwardedFor: "127.0.0.1:58104",
 		ForwardedBy:  "127.0.0.1:7777",
-		URLPath:      "/some/path",
 	}
 
-	h := make(http.Header)
-	msg.WriteTo(h)
+	var h = http.Header{}
+	msg.Update(h)
 	actual, err := ParseControlMessage(h)
 	if err != nil {
 		t.Errorf("Parse error %s", err)
