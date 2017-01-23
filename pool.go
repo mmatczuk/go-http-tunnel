@@ -11,21 +11,25 @@ import (
 	"github.com/mmatczuk/tunnel/id"
 )
 
+type onDisconnectListener func(identifier id.ID)
+
 type connPair struct {
 	conn       net.Conn
 	clientConn *http2.ClientConn
 }
 
 type connPool struct {
-	t     *http2.Transport
-	conns map[string]connPair // key is host:port
-	mu    sync.RWMutex
+	t        *http2.Transport
+	conns    map[string]connPair // key is host:port
+	listener onDisconnectListener
+	mu       sync.RWMutex
 }
 
-func newConnPool(t *http2.Transport) *connPool {
+func newConnPool(t *http2.Transport, l onDisconnectListener) *connPool {
 	return &connPool{
-		t:     t,
-		conns: make(map[string]connPair),
+		t:        t,
+		listener: l,
+		conns:    make(map[string]connPair),
 	}
 }
 
@@ -44,10 +48,13 @@ func (p *connPool) MarkDead(c *http2.ClientConn) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	for identifier, cp := range p.conns {
+	for addr, cp := range p.conns {
 		if cp.clientConn == c {
 			cp.conn.Close()
-			delete(p.conns, identifier)
+			delete(p.conns, addr)
+			if p.listener != nil {
+				p.listener(p.addrToIdentifier(addr))
+			}
 			return
 		}
 	}
@@ -84,6 +91,9 @@ func (p *connPool) DeleteConn(identifier id.ID) {
 	if cp, ok := p.conns[addr]; ok {
 		cp.conn.Close()
 		delete(p.conns, addr)
+		if p.listener != nil {
+			p.listener(identifier)
+		}
 	}
 }
 
@@ -93,4 +103,8 @@ func (p *connPool) URL(identifier id.ID) string {
 
 func (p *connPool) addr(identifier id.ID) string {
 	return fmt.Sprint(identifier.String(), ":443")
+}
+
+func (p *connPool) addrToIdentifier(addr string) id.ID {
+	return id.NewFromString(addr[:len(addr)-4])
 }

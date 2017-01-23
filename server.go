@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -45,26 +46,28 @@ type Server struct {
 func NewServer(config *ServerConfig) (*Server, error) {
 	listener, err := listener(config)
 	if err != nil {
-		return nil, fmt.Errorf("tls listener failed :%s", err)
+		return nil, fmt.Errorf("tls listener failedAuthorization: %s", err)
 	}
-
-	t := &http2.Transport{}
-	pool := newConnPool(t)
-	t.ConnPool = pool
 
 	logger := config.Logger
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 
-	return &Server{
-		registry:   newRegistry(),
-		config:     config,
-		listener:   listener,
-		connPool:   pool,
-		httpClient: &http.Client{Transport: t},
-		logger:     logger,
-	}, nil
+	s := &Server{
+		registry: newRegistry(logger),
+		config:   config,
+		listener: listener,
+		logger:   logger,
+	}
+
+	t := &http2.Transport{}
+	pool := newConnPool(t, s.disconnected)
+	t.ConnPool = pool
+	s.connPool = pool
+	s.httpClient = &http.Client{Transport: t}
+
+	return s, nil
 }
 
 func listener(config *ServerConfig) (net.Listener, error) {
@@ -82,18 +85,40 @@ func listener(config *ServerConfig) (net.Listener, error) {
 	return tls.Listen("tcp", config.Addr, config.TLSConfig)
 }
 
-// Start starts accepting connections form clients and allowed clients listeners.
-// For accepting http traffic one must run server as a handler to http server.
+// disconnected clears resources used by client, it's invoked by connection pool
+// when client goes away.
+func (s *Server) disconnected(identifier id.ID) {
+	s.logger.Log(
+		"level", 1,
+		"action", "disconnected",
+		"identifier", identifier,
+	)
+
+	i := s.registry.clear(identifier)
+	if i == nil {
+		return
+	}
+	for _, l := range i.Listeners {
+		s.logger.Log(
+			"level", 2,
+			"action", "close listener",
+			"identifier", identifier,
+			"addr", l.Addr(),
+		)
+
+		l.Close()
+	}
+}
+
+// Start starts accepting connections form clients. For accepting http traffic
+// from end users server must be run as handler on http server.
 func (s *Server) Start() {
 	s.logger.Log(
 		"level", 1,
 		"action", "start",
 		"addr", s.listener.Addr(),
 	)
-	go s.listenControl()
-}
 
-func (s *Server) listenControl() {
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
@@ -187,6 +212,11 @@ func (s *Server) handleClient(conn net.Conn) {
 		goto reject
 	}
 
+	{
+		ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
+		defer cancel()
+		req.WithContext(ctx)
+	}
 	resp, err = s.httpClient.Do(req)
 	if err != nil {
 		logger.Log(
@@ -196,46 +226,53 @@ func (s *Server) handleClient(conn net.Conn) {
 		)
 		goto reject
 	}
+
 	if resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf("Status %s", resp.Status)
 		logger.Log(
 			"level", 2,
 			"msg", "handshake failed",
-			"err", fmt.Errorf("Status %s", resp.Status),
+			"err", err,
 		)
 		goto reject
 	}
-	if resp.ContentLength > 0 {
-		var done chan struct{}
-		go func() {
-			err = json.NewDecoder(&io.LimitedReader{
-				R: resp.Body,
-				N: 126976,
-			}).Decode(&tunnels)
-			close(done)
-		}()
 
-		select {
-		case <-done:
-		case <-time.After(5 * time.Minute):
-			err = fmt.Errorf("timeout")
-		}
+	if resp.ContentLength == 0 {
+		err = fmt.Errorf("Tunnels Content-Legth: 0")
+		logger.Log(
+			"level", 2,
+			"msg", "handshake failed",
+			"err", err,
+		)
+		goto reject
+	}
 
-		if err != nil {
-			logger.Log(
-				"level", 2,
-				"msg", "handshake failed",
-				"err", err,
-			)
-			goto reject
-		}
-		if err = s.AddTunnels(tunnels, identifier); err != nil {
-			logger.Log(
-				"level", 2,
-				"msg", "handshake failed",
-				"err", err,
-			)
-			goto reject
-		}
+	if err = json.NewDecoder(&io.LimitedReader{R: resp.Body, N: 126976}).Decode(&tunnels); err != nil {
+		logger.Log(
+			"level", 2,
+			"msg", "handshake failed",
+			"err", err,
+		)
+		goto reject
+	}
+
+	if len(tunnels) == 0 {
+		err = fmt.Errorf("No tunnels")
+		logger.Log(
+			"level", 2,
+			"msg", "handshake failed",
+			"err", err,
+		)
+		goto reject
+	}
+
+	if err = s.addTunnels(tunnels, identifier); err != nil {
+		logger.Log(
+			"level", 2,
+			"msg", "handshake failed",
+			"err", err,
+		)
+		goto reject
 	}
 
 	logger.Log(
@@ -246,60 +283,89 @@ func (s *Server) handleClient(conn net.Conn) {
 	return
 
 reject:
-	s.logger.Log(
+	logger.Log(
 		"level", 1,
 		"action", "rejected",
-		"addr", conn.RemoteAddr(),
 	)
 
+	s.notifyError(err, identifier)
 	s.connPool.DeleteConn(identifier)
 }
 
-// AddTunnels invokes AddHost or AddListener based on data from proto.Tunnel. If
-// a tunnel cannot be added whole batch is reverted.
-func (s *Server) AddTunnels(tunnels map[string]*proto.Tunnel, identifier id.ID) error {
-	var (
-		hosts     []string
-		listeners []net.Listener
-		err       error
-	)
+// notifyError tries to send error to client.
+func (s *Server) notifyError(serverError error, identifier id.ID) {
+	if serverError == nil {
+		return
+	}
 
+	req, err := http.NewRequest(http.MethodConnect, s.connPool.URL(identifier), nil)
+	if err != nil {
+		s.logger.Log(
+			"level", 2,
+			"action", "client error notification failed",
+			"identifier", identifier,
+			"err", err,
+		)
+		return
+	}
+
+	req.Header.Set(proto.ErrorHeader, serverError.Error())
+
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
+	defer cancel()
+	req.WithContext(ctx)
+
+	s.httpClient.Do(req)
+}
+
+// addTunnels invokes addHost or addListener based on data from proto.Tunnel. If
+// a tunnel cannot be added whole batch is reverted.
+func (s *Server) addTunnels(tunnels map[string]*proto.Tunnel, identifier id.ID) error {
+	i := &RegistryItem{
+		Hosts:     []*HostAuth{},
+		Listeners: []net.Listener{},
+	}
+
+	var err error
 	for name, t := range tunnels {
 		switch t.Protocol {
 		case proto.HTTP:
-			err = s.AddHost(t.Host, NewAuth(t.Auth), identifier)
-			if err != nil {
-				goto rollback
-			}
-			hosts = append(hosts, t.Host)
+			i.Hosts = append(i.Hosts, &HostAuth{t.Host, NewAuth(t.Auth)})
 		case proto.TCP, proto.TCP4, proto.TCP6, proto.UNIX:
 			var l net.Listener
 			l, err = net.Listen(t.Protocol, t.Addr)
 			if err != nil {
 				goto rollback
 			}
-			listeners = append(listeners, l)
 
-			err := s.AddListener(l, identifier)
-			if err != nil {
-				goto rollback
-			}
+			s.logger.Log(
+				"level", 2,
+				"action", "open listener",
+				"identifier", identifier,
+				"addr", l.Addr(),
+			)
+
+			i.Listeners = append(i.Listeners, l)
 		default:
 			err = fmt.Errorf("unsupported protocol for tunnel %s: %s", name, t.Protocol)
 			goto rollback
 		}
 	}
 
+	err = s.set(i, identifier)
+	if err != nil {
+		goto rollback
+	}
+
+	for _, l := range i.Listeners {
+		s.listen(l, identifier)
+	}
+
 	return nil
 
 rollback:
-	for _, h := range hosts {
-		s.DeleteHost(h, identifier)
-	}
-
-	for _, l := range listeners {
+	for _, l := range i.Listeners {
 		l.Close()
-		s.DeleteListener(l, identifier)
 	}
 
 	return err
@@ -312,17 +378,6 @@ func (s *Server) Unsubscribe(identifier id.ID) *RegistryItem {
 	return s.registry.Unsubscribe(identifier)
 }
 
-// AddListener adds listener to client.
-func (s *Server) AddListener(l net.Listener, identifier id.ID) error {
-	if err := s.registry.AddListener(l, identifier); err != nil {
-		return err
-	}
-
-	go s.listen(l, identifier)
-
-	return nil
-}
-
 func (s *Server) listen(l net.Listener, identifier id.ID) {
 	for {
 		conn, err := l.Accept()
@@ -330,6 +385,7 @@ func (s *Server) listen(l net.Listener, identifier id.ID) {
 			s.logger.Log(
 				"level", 2,
 				"msg", "accept connection failed",
+				"identifier", identifier,
 				"err", err,
 			)
 			if strings.Contains(err.Error(), "use of closed network connection") {
@@ -352,6 +408,7 @@ func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMe
 	s.logger.Log(
 		"level", 2,
 		"action", "proxy",
+		"identifier", identifier,
 		"ctrlMsg", msg,
 	)
 
@@ -364,6 +421,7 @@ func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMe
 		s.logger.Log(
 			"level", 0,
 			"msg", "proxy error",
+			"identifier", identifier,
 			"ctrlMsg", msg,
 			"err", err,
 		)
@@ -371,17 +429,22 @@ func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMe
 		return
 	}
 
-	go transfer(pw, conn, log.NewContext(s.logger).With(
-		"dir", "user to client",
-		"dst", identifier,
-		"src", conn.RemoteAddr(),
-	))
+	done := make(chan struct{})
+	go func() {
+		transfer(pw, conn, log.NewContext(s.logger).With(
+			"dir", "user to client",
+			"dst", identifier,
+			"src", conn.RemoteAddr(),
+		))
+		close(done)
+	}()
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		s.logger.Log(
 			"level", 0,
 			"msg", "proxy error",
+			"identifier", identifier,
 			"ctrlMsg", msg,
 			"err", err,
 		)
@@ -394,17 +457,27 @@ func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMe
 		"dst", conn.RemoteAddr(),
 		"src", identifier,
 	))
+
+	<-done
 }
 
 // ServeHTTP proxies http connection to the client.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resp, err := s.RoundTrip(r)
-
 	if err == errUnauthorised {
+		w.Header().Set("WWW-Authenticate", "Basic realm=\"User Visible Realm\"")
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 	if err != nil {
+		s.logger.Log(
+			"level", 0,
+			"action", "round trip failed",
+			"addr", r.RemoteAddr,
+			"url", r.URL,
+			"err", err,
+		)
+
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -438,6 +511,7 @@ func (s *Server) RoundTrip(r *http.Request) (*http.Response, error) {
 		if auth.User != user || auth.Password != password {
 			return nil, errUnauthorised
 		}
+		r.Header.Del("Authorization")
 	}
 
 	return s.proxyHTTP(identifier, r, msg)
@@ -447,6 +521,7 @@ func (s *Server) proxyHTTP(identifier id.ID, r *http.Request, msg *proto.Control
 	s.logger.Log(
 		"level", 2,
 		"action", "proxy",
+		"identifier", identifier,
 		"ctrlMsg", msg,
 	)
 
@@ -466,6 +541,7 @@ func (s *Server) proxyHTTP(identifier id.ID, r *http.Request, msg *proto.Control
 			s.logger.Log(
 				"level", 0,
 				"msg", "proxy error",
+				"identifier", identifier,
 				"ctrlMsg", msg,
 				"err", err,
 			)
@@ -474,6 +550,7 @@ func (s *Server) proxyHTTP(identifier id.ID, r *http.Request, msg *proto.Control
 		s.logger.Log(
 			"level", 3,
 			"action", "transferred",
+			"identifier", identifier,
 			"bytes", cw.count,
 			"dir", "user to client",
 			"dst", r.Host,
@@ -489,6 +566,14 @@ func (s *Server) proxyHTTP(identifier id.ID, r *http.Request, msg *proto.Control
 	if err != nil {
 		return nil, fmt.Errorf("proxy error: %s", err)
 	}
+
+	s.logger.Log(
+		"level", 2,
+		"action", "proxy done",
+		"identifier", identifier,
+		"ctrlMsg", msg,
+		"status code", resp.StatusCode,
+	)
 
 	return resp, nil
 }

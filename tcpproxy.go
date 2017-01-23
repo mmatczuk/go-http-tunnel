@@ -77,7 +77,7 @@ func (p *TCPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage
 		return
 	}
 
-	local, err := net.DialTimeout("tcp", target, DefaultDialTimeout)
+	local, err := net.DialTimeout("tcp", target, DefaultTimeout)
 	if err != nil {
 		p.logger.Log(
 			"level", 0,
@@ -100,6 +100,7 @@ func (p *TCPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage
 		"dst", target,
 		"src", msg.ForwardedBy,
 	))
+	<-done
 }
 
 func (p *TCPProxy) localAddrFor(hostPort string) string {
@@ -107,7 +108,7 @@ func (p *TCPProxy) localAddrFor(hostPort string) string {
 		return p.localAddr
 	}
 
-	// try host and port
+	// try hostPort
 	if addr := p.localAddrMap[hostPort]; addr != "" {
 		return addr
 	}
@@ -115,6 +116,11 @@ func (p *TCPProxy) localAddrFor(hostPort string) string {
 	// try port
 	host, port, _ := net.SplitHostPort(hostPort)
 	if addr := p.localAddrMap[port]; addr != "" {
+		return addr
+	}
+
+	// try 0.0.0.0:port
+	if addr := p.localAddrMap[fmt.Sprintf("0.0.0.0:%s", port)]; addr != "" {
 		return addr
 	}
 

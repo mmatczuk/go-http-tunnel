@@ -17,6 +17,7 @@ const (
 
 // ControlMessage headers
 const (
+	ErrorHeader     = "Error"
 	ForwardedHeader = "Forwarded"
 )
 

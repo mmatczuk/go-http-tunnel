@@ -16,9 +16,8 @@ import (
 )
 
 var (
-	// DefaultDialTimeout specifies how long client should wait for tunnel
-	// server or local service connection.
-	DefaultDialTimeout = 10 * time.Second
+	// DefaultTimeout specifies general purpose timeout.
+	DefaultTimeout = 10 * time.Second
 )
 
 // ClientConfig is configuration of the Client.
@@ -51,6 +50,7 @@ type Client struct {
 	conn       net.Conn
 	connMu     sync.Mutex
 	httpServer *http2.Server
+	serverErr  error
 	logger     log.Logger
 }
 
@@ -62,6 +62,9 @@ func NewClient(config *ClientConfig) *Client {
 	}
 	if config.TLSClientConfig == nil {
 		panic("Missing TLSClientConfig")
+	}
+	if config.Tunnels == nil || len(config.Tunnels) == 0 {
+		panic("Missing Tunnels")
 	}
 	if config.Proxy == nil {
 		panic("Missing Proxy")
@@ -85,29 +88,53 @@ func NewClient(config *ClientConfig) *Client {
 // error, otherwise it spawns a new goroutine with http/2 server handling
 // ControlMessages.
 func (c *Client) Start() error {
-	c.connMu.Lock()
-	defer c.connMu.Unlock()
-
 	c.logger.Log(
 		"level", 1,
 		"action", "start",
 	)
 
+	for {
+		conn, err := c.connect()
+		if err != nil {
+			return err
+		}
+
+		c.httpServer.ServeConn(conn, &http2.ServeConnOpts{
+			Handler: http.HandlerFunc(c.serveHTTP),
+		})
+
+		c.logger.Log(
+			"level", 1,
+			"action", "disconnected",
+		)
+
+		c.connMu.Lock()
+		err = c.serverErr
+		c.conn = nil
+		c.serverErr = nil
+		c.connMu.Unlock()
+
+		if err != nil {
+			return fmt.Errorf("server error: %s", err)
+		}
+	}
+}
+
+func (c *Client) connect() (net.Conn, error) {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+
 	if c.conn != nil {
-		return fmt.Errorf("already connected")
+		return nil, fmt.Errorf("already connected")
 	}
 
 	conn, err := c.dial()
 	if err != nil {
-		return fmt.Errorf("failed to connect to server: %s", err)
+		return nil, fmt.Errorf("failed to connect to server: %s", err)
 	}
 	c.conn = conn
 
-	go c.httpServer.ServeConn(conn, &http2.ServeConnOpts{
-		Handler: http.HandlerFunc(c.serveHTTP),
-	})
-
-	return nil
+	return conn, nil
 }
 
 func (c *Client) dial() (net.Conn, error) {
@@ -129,7 +156,7 @@ func (c *Client) dial() (net.Conn, error) {
 			conn, err = c.config.DialTLS(network, addr, tlsConfig)
 		} else {
 			conn, err = tls.DialWithDialer(
-				&net.Dialer{Timeout: DefaultDialTimeout},
+				&net.Dialer{Timeout: DefaultTimeout},
 				network, addr, tlsConfig,
 			)
 		}
@@ -181,7 +208,11 @@ func (c *Client) dial() (net.Conn, error) {
 
 func (c *Client) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodConnect {
-		c.handleHandshake(w, r)
+		if r.Header.Get(proto.ErrorHeader) != "" {
+			c.handleHandshakeError(w, r)
+		} else {
+			c.handleHandshake(w, r)
+		}
 		return
 	}
 
@@ -218,6 +249,21 @@ func (c *Client) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
+func (c *Client) handleHandshakeError(w http.ResponseWriter, r *http.Request) {
+	err := fmt.Errorf(r.Header.Get(proto.ErrorHeader))
+
+	c.logger.Log(
+		"level", 1,
+		"action", "handshake error",
+		"addr", r.RemoteAddr,
+		"err", err,
+	)
+
+	c.connMu.Lock()
+	c.serverErr = err
+	c.connMu.Unlock()
+}
+
 func (c *Client) handleHandshake(w http.ResponseWriter, r *http.Request) {
 	c.logger.Log(
 		"level", 1,
@@ -227,18 +273,16 @@ func (c *Client) handleHandshake(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 
-	if c.config.Tunnels != nil {
-		b, err := json.Marshal(c.config.Tunnels)
-		if err != nil {
-			c.logger.Log(
-				"level", 0,
-				"msg", "handshake failed",
-				"err", err,
-			)
-			return
-		}
-		w.Write(b)
+	b, err := json.Marshal(c.config.Tunnels)
+	if err != nil {
+		c.logger.Log(
+			"level", 0,
+			"msg", "handshake failed",
+			"err", err,
+		)
+		return
 	}
+	w.Write(b)
 }
 
 // Stop closes the connection between client and server. After stopping client

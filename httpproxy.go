@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strings"
+	"path"
 
 	"github.com/mmatczuk/tunnel/log"
 	"github.com/mmatczuk/tunnel/proto"
@@ -101,6 +101,8 @@ func (p *HTTPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessag
 // is correctly routed based on localURL and localURLMap. If no URL can be found
 // the request is canceled.
 func (p *HTTPProxy) Director(req *http.Request) {
+	orig := *req.URL
+
 	target := p.localURLFor(req.URL)
 	if target == nil {
 		p.logger.Log(
@@ -129,18 +131,26 @@ func (p *HTTPProxy) Director(req *http.Request) {
 		// explicitly disable User-Agent so it's not set to default value
 		req.Header.Set("User-Agent", "")
 	}
+
+	req.Host = req.URL.Host
+
+	p.logger.Log(
+		"level", 2,
+		"action", "url rewrite",
+		"from", &orig,
+		"to", req.URL,
+	)
 }
 
 func singleJoiningSlash(a, b string) string {
-	aslash := strings.HasSuffix(a, "/")
-	bslash := strings.HasPrefix(b, "/")
-	switch {
-	case aslash && bslash:
-		return a + b[1:]
-	case !aslash && !bslash:
-		return a + "/" + b
+	if a == "" || a == "/" {
+		return b
 	}
-	return a + b
+	if b == "" || b == "/" {
+		return a
+	}
+
+	return path.Join(a, b)
 }
 
 func (p *HTTPProxy) localURLFor(u *url.URL) *url.URL {

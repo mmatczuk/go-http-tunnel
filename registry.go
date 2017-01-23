@@ -6,13 +6,20 @@ import (
 	"sync"
 
 	"github.com/mmatczuk/tunnel/id"
+	"github.com/mmatczuk/tunnel/log"
 )
 
 // RegistryItem holds information about hosts and listeners associated with a
 // client.
 type RegistryItem struct {
-	Hosts     []string
+	Hosts     []*HostAuth
 	Listeners []net.Listener
+}
+
+// HostAuth holds host and authentication info.
+type HostAuth struct {
+	Host string
+	Auth *Auth
 }
 
 type hostInfo struct {
@@ -20,23 +27,35 @@ type hostInfo struct {
 	auth       *Auth
 }
 
-// registry manages client tunnels information.
 type registry struct {
-	items map[id.ID]*RegistryItem
-	hosts map[string]*hostInfo
-	mu    sync.RWMutex
+	items  map[id.ID]*RegistryItem
+	hosts  map[string]*hostInfo
+	mu     sync.RWMutex
+	logger log.Logger
 }
 
-// newRegistry creates new registry.
-func newRegistry() *registry {
+func newRegistry(logger log.Logger) *registry {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
+
 	return &registry{
-		items: make(map[id.ID]*RegistryItem),
-		hosts: make(map[string]*hostInfo, 0),
+		items:  make(map[id.ID]*RegistryItem),
+		hosts:  make(map[string]*hostInfo, 0),
+		logger: logger,
 	}
 }
 
-// Subscribe adds new client to registry, this method is idempotent.
+var voidRegistryItem = &RegistryItem{}
+
+// Subscribe allows to connect client with a given identifier.
 func (r *registry) Subscribe(identifier id.ID) {
+	r.logger.Log(
+		"level", 1,
+		"action", "subscribe",
+		"identifier", identifier,
+	)
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -44,13 +63,10 @@ func (r *registry) Subscribe(identifier id.ID) {
 		return
 	}
 
-	r.items[identifier] = &RegistryItem{
-		Hosts:     make([]string, 0),
-		Listeners: make([]net.Listener, 0),
-	}
+	r.items[identifier] = voidRegistryItem
 }
 
-// IsSubscribed returns true if client is subscribed to registry.
+// IsSubscribed returns true if client is subscribed.
 func (r *registry) IsSubscribed(identifier id.ID) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -60,12 +76,10 @@ func (r *registry) IsSubscribed(identifier id.ID) bool {
 
 // Subscriber returns client identifier assigned to given host.
 func (r *registry) Subscriber(hostPort string) (id.ID, *Auth, bool) {
-	host := trimPort(hostPort)
-
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	h, ok := r.hosts[host]
+	h, ok := r.hosts[trimPort(hostPort)]
 	if !ok {
 		return id.ID{}, nil, false
 	}
@@ -73,8 +87,14 @@ func (r *registry) Subscriber(hostPort string) (id.ID, *Auth, bool) {
 	return h.identifier, h.auth, ok
 }
 
-// Unsubscribe removes client from registy and returns it's RegistryItem.
+// Unsubscribe removes client from registry and returns it's RegistryItem.
 func (r *registry) Unsubscribe(identifier id.ID) *RegistryItem {
+	r.logger.Log(
+		"level", 1,
+		"action", "unsubscribe",
+		"identifier", identifier,
+	)
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -82,9 +102,14 @@ func (r *registry) Unsubscribe(identifier id.ID) *RegistryItem {
 	if !ok {
 		return nil
 	}
+	if i == voidRegistryItem {
+		return nil
+	}
 
-	for _, h := range i.Hosts {
-		delete(r.hosts, h)
+	if i.Hosts != nil {
+		for _, h := range i.Hosts {
+			delete(r.hosts, h.Host)
+		}
 	}
 
 	delete(r.items, identifier)
@@ -92,103 +117,71 @@ func (r *registry) Unsubscribe(identifier id.ID) *RegistryItem {
 	return i
 }
 
-// AddHost assigns host to client unless the host is not already taken.
-func (r *registry) AddHost(hostPort string, auth *Auth, identifier id.ID) error {
-	host := trimPort(hostPort)
+func (r *registry) set(i *RegistryItem, identifier id.ID) error {
+	r.logger.Log(
+		"level", 2,
+		"action", "set registry item",
+		"identifier", identifier,
+	)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if auth != nil && auth.User == "" {
-		return fmt.Errorf("Missing auth user")
-	}
-
-	i, ok := r.items[identifier]
+	j, ok := r.items[identifier]
 	if !ok {
 		return errClientNotSubscribed
 	}
-
-	if _, ok := r.hosts[host]; ok {
-		return fmt.Errorf("host %q is occupied", host)
-	}
-	r.hosts[host] = &hostInfo{
-		identifier: identifier,
-		auth:       auth,
+	if j != voidRegistryItem {
+		return fmt.Errorf("attempt to overwrite registry item")
 	}
 
-	i.Hosts = append(i.Hosts, host)
+	if i.Hosts != nil {
+		for _, h := range i.Hosts {
+			if h.Auth != nil && h.Auth.User == "" {
+				return fmt.Errorf("missing auth user")
+			}
+			if _, ok := r.hosts[trimPort(h.Host)]; ok {
+				return fmt.Errorf("host %q is occupied", h.Host)
+			}
+		}
+
+		for _, h := range i.Hosts {
+			r.hosts[trimPort(h.Host)] = &hostInfo{
+				identifier: identifier,
+				auth:       h.Auth,
+			}
+		}
+	}
+
+	r.items[identifier] = i
 
 	return nil
 }
 
-// DeleteHost unassigns host from client.
-func (r *registry) DeleteHost(hostPort string, identifier id.ID) {
-	host := trimPort(hostPort)
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if h, ok := r.hosts[host]; !ok || h.identifier != identifier {
-		return
-	}
-
-	delete(r.hosts, host)
-
-	i := r.items[identifier]
-	for k, v := range i.Hosts {
-		if v == host {
-			i.Hosts = append(i.Hosts[:k], i.Hosts[k+1:]...)
-			return
-		}
-	}
-}
-
-// AddListener adds client listener.
-func (r *registry) AddListener(l net.Listener, identifier id.ID) error {
-	if l == nil {
-		panic("Missing listener")
-	}
+func (r *registry) clear(identifier id.ID) *RegistryItem {
+	r.logger.Log(
+		"level", 2,
+		"action", "clear registry item",
+		"identifier", identifier,
+	)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	i, ok := r.items[identifier]
-	if !ok {
-		return errClientNotSubscribed
+	if !ok || i == voidRegistryItem {
+		return nil
 	}
 
-	for k, v := range i.Listeners {
-		if v == l {
-			return fmt.Errorf("listener already added at %d", k)
+	if i.Hosts != nil {
+		for _, h := range i.Hosts {
+			delete(r.hosts, trimPort(h.Host))
 		}
 	}
 
-	i.Listeners = append(i.Listeners, l)
+	r.items[identifier] = voidRegistryItem
 
-	return nil
-}
-
-// DeleteListener removes listener from client. Listener must be closed to stop
-// accepting go routine.
-func (r *registry) DeleteListener(l net.Listener, identifier id.ID) {
-	if l == nil {
-		panic("Missing listener")
-	}
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	i, ok := r.items[identifier]
-	if !ok {
-		return
-	}
-
-	for k, v := range i.Listeners {
-		if v == l {
-			i.Listeners = append(i.Listeners[:k], i.Listeners[k+1:]...)
-			return
-		}
-	}
+	return i
 }
 
 func trimPort(hostPort string) (host string) {

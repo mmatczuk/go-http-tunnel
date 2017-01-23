@@ -15,6 +15,7 @@ import (
 	"github.com/mmatczuk/tunnel"
 	"github.com/mmatczuk/tunnel/id"
 	"github.com/mmatczuk/tunnel/log"
+	"github.com/mmatczuk/tunnel/proto"
 )
 
 const (
@@ -37,13 +38,6 @@ var ctx testContext
 func TestMain(m *testing.M) {
 	logger := log.NewFilterLogger(log.NewStdLogger(), 1)
 
-	// prepare server TCP listener
-	serverTCPListener, err := net.Listen("tcp", ":0")
-	if err != nil {
-		panic(err)
-	}
-	defer serverTCPListener.Close()
-
 	// prepare tunnel server
 	cert, identifier := selfSignedCert()
 	s, err := tunnel.NewServer(&tunnel.ServerConfig{
@@ -54,30 +48,19 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-
 	s.Subscribe(identifier)
-
-	auth := &tunnel.Auth{
-		User:     "user",
-		Password: "password",
-	}
-
-	if err := s.AddHost("localhost", auth, identifier); err != nil {
-		panic(err)
-	}
-	if err := s.AddListener(serverTCPListener, identifier); err != nil {
-		panic(err)
-	}
-	s.Start()
+	go s.Start()
 	defer s.Stop()
 
 	// run server HTTP interface
-	serverHTTPListener, err := net.Listen("tcp", ":0")
+	l, err := net.Listen("tcp", ":0")
 	if err != nil {
 		panic(err)
 	}
-	defer serverHTTPListener.Close()
-	go http.Serve(serverHTTPListener, s)
+	defer l.Close()
+	go http.Serve(l, s)
+
+	httpAddr := l.Addr()
 
 	// prepare local TCP echo service
 	echoTCPListener, err := net.Listen("tcp", ":0")
@@ -95,37 +78,50 @@ func TestMain(m *testing.M) {
 	defer echoHTTPListener.Close()
 	go EchoHTTP(echoHTTPListener)
 
-	// prepare proxy
-	httpproxy := tunnel.NewMultiHTTPProxy(map[string]*url.URL{
-		"localhost:" + Port(serverHTTPListener.Addr()): {
-			Scheme: "http",
-			Host:   echoHTTPListener.Addr().String(),
-		},
-	}, log.NewNopLogger())
-
-	tcpproxy := tunnel.NewMultiTCPProxy(map[string]string{
-		Port(serverTCPListener.Addr()): echoTCPListener.Addr().String(),
-	}, log.NewNopLogger())
-
-	proxy := tunnel.Proxy(tunnel.ProxyFuncs{
-		HTTP: httpproxy.Proxy,
-		TCP:  tcpproxy.Proxy,
-	})
+	// allocate free port
+	tcpAddr := freeAddr()
 
 	// prepare tunnel client
+	tunnels := map[string]*proto.Tunnel{
+		"http": {
+			Protocol: proto.HTTP,
+			Host:     "localhost",
+			Auth:     "user:password",
+		},
+		"tcp": {
+			Protocol: proto.TCP,
+			Addr:     tcpAddr.String(),
+		},
+	}
+
+	httpProxy := tunnel.NewMultiHTTPProxy(map[string]*url.URL{
+		"localhost:" + port(httpAddr): {
+			Scheme: "http",
+			Host:   "127.0.0.1:" + port(echoHTTPListener.Addr()),
+		},
+	}, log.NewContext(logger).WithPrefix("HTTP proxy", ":"))
+
+	tcpProxy := tunnel.NewMultiTCPProxy(map[string]string{
+		port(tcpAddr): echoTCPListener.Addr().String(),
+	}, log.NewContext(logger).WithPrefix("TCP proxy", ":"))
+
 	c := tunnel.NewClient(&tunnel.ClientConfig{
 		ServerAddr:      s.Addr(),
 		TLSClientConfig: TLSConfig(cert),
-		Proxy:           proxy,
-		Logger:          log.NewContext(logger).WithPrefix("client", ":"),
+		Tunnels:         tunnels,
+		Proxy: tunnel.Proxy(tunnel.ProxyFuncs{
+			HTTP: httpProxy.Proxy,
+			TCP:  tcpProxy.Proxy,
+		}),
+		Logger: log.NewContext(logger).WithPrefix("client", ":"),
 	})
-	if err := c.Start(); err != nil {
-		panic(err)
-	}
+	go c.Start()
+	// FIXME: replace sleep with client state change watch when ready
+	time.Sleep(500 * time.Millisecond)
 	defer c.Stop()
 
-	ctx.httpAddr = serverHTTPListener.Addr()
-	ctx.tcpAddr = serverTCPListener.Addr()
+	ctx.httpAddr = httpAddr
+	ctx.tcpAddr = tcpAddr
 	ctx.payload = randPayload(payloadInitialSize, payloadLen)
 
 	m.Run()
@@ -166,7 +162,7 @@ func TestProxying(t *testing.T) {
 
 func testHTTP(t *testing.T, payload []byte, repeat uint) {
 	for repeat > 0 {
-		url := fmt.Sprintf("http://localhost:%s/some/path", Port(ctx.httpAddr))
+		url := fmt.Sprintf("http://localhost:%s/some/path", port(ctx.httpAddr))
 		r, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(payload))
 		if err != nil {
 			panic("Failed to create request")
@@ -251,6 +247,19 @@ func randPayload(initialSize, n int) [][]byte {
 		l *= 2
 	}
 	return payload
+}
+
+func freeAddr() net.Addr {
+	l, err := net.Listen("tcp", ":0")
+	if err != nil {
+		panic(err)
+	}
+	defer l.Close()
+	return l.Addr()
+}
+
+func port(addr net.Addr) string {
+	return fmt.Sprint(addr.(*net.TCPAddr).Port)
 }
 
 func selfSignedCert() (tls.Certificate, id.ID) {
