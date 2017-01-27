@@ -80,7 +80,7 @@ func (p *HTTPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessag
 
 	rw, ok := w.(http.ResponseWriter)
 	if !ok {
-		panic(fmt.Sprintf("Expected http.ResponseWriter got %t", w))
+		panic(fmt.Sprintf("Expected http.ResponseWriter got %T", w))
 	}
 
 	req, err := http.ReadRequest(bufio.NewReader(r))

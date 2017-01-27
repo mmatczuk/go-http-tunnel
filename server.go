@@ -378,7 +378,7 @@ func (s *Server) proxyHTTP(host string, r *http.Request, msg *proto.ControlMessa
 
 		s.logger.Log(
 			"level", 3,
-			"action", "transfered",
+			"action", "transferred",
 			"bytes", cw.count,
 			"dir", "user to client",
 			"dst", r.Host,

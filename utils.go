@@ -65,7 +65,7 @@ func transfer(dst io.Writer, src io.ReadCloser, logger log.Logger) {
 
 	logger.Log(
 		"level", 3,
-		"action", "transfered",
+		"action", "transferred",
 		"bytes", n,
 	)
 }
