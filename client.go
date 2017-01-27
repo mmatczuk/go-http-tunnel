@@ -8,9 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/koding/logging"
-	"github.com/mmatczuk/tunnel/proto"
 	"golang.org/x/net/http2"
+
+	"github.com/mmatczuk/tunnel/log"
+	"github.com/mmatczuk/tunnel/proto"
 )
 
 var (
@@ -34,8 +35,8 @@ type ClientConfig struct {
 	// Proxy is ProxyFunc responsible for transferring data between server
 	// and local services.
 	Proxy ProxyFunc
-	// Log specifies the logger. If nil a default logging.Logger is used.
-	Log logging.Logger
+	// Logger is optional logger. If nil no logs will be printed.
+	Logger log.Logger
 }
 
 // Backoff defines behavior of staggering reconnection retries.
@@ -58,21 +59,31 @@ type Client struct {
 	conn       net.Conn
 	connMu     sync.Mutex
 	httpServer *http2.Server
-	log        logging.Logger
+	logger     log.Logger
 }
 
 // NewClient creates a new unconnected Client based on configuration. Caller
 // must invoke Start() on returned instance in order to connect server.
 func NewClient(config *ClientConfig) *Client {
-	log := logging.NewLogger("client")
-	if config.Log != nil {
-		log = config.Log
+	if config.ServerAddr == "" {
+		panic("Missing ServerAddr")
+	}
+	if config.TLSClientConfig == nil {
+		panic("Missing TLSClientConfig")
+	}
+	if config.Proxy == nil {
+		panic("Missing Proxy")
+	}
+
+	logger := config.Logger
+	if logger == nil {
+		logger = log.NewNopLogger()
 	}
 
 	c := &Client{
 		config:     config,
 		httpServer: &http2.Server{},
-		log:        log,
+		logger:     logger,
 	}
 
 	return c
@@ -85,8 +96,16 @@ func (c *Client) Start() error {
 	c.connMu.Lock()
 	defer c.connMu.Unlock()
 
-	c.log.Info("Connecting to %q", c.config.ServerAddr)
-	conn, err := c.dial("tcp", c.config.ServerAddr, c.config.TLSClientConfig)
+	c.logger.Log(
+		"level", 1,
+		"action", "start",
+	)
+
+	if c.conn != nil {
+		return fmt.Errorf("already connected")
+	}
+
+	conn, err := c.dial()
 	if err != nil {
 		return fmt.Errorf("failed to connect to server: %s", err)
 	}
@@ -99,12 +118,41 @@ func (c *Client) Start() error {
 	return nil
 }
 
-func (c *Client) dial(network, addr string, config *tls.Config) (net.Conn, error) {
-	doDial := func() (net.Conn, error) {
+func (c *Client) dial() (net.Conn, error) {
+	var (
+		network   = "tcp"
+		addr      = c.config.ServerAddr
+		tlsConfig = c.config.TLSClientConfig
+	)
+
+	doDial := func() (conn net.Conn, err error) {
+		c.logger.Log(
+			"level", 1,
+			"action", "dial",
+			"network", network,
+			"addr", addr,
+		)
+
 		if c.config.DialTLS != nil {
-			return c.config.DialTLS(network, addr, config)
+			conn, err = c.config.DialTLS(network, addr, tlsConfig)
+		} else {
+			conn, err = tls.DialWithDialer(
+				&net.Dialer{Timeout: DefaultDialTimeout},
+				network, addr, tlsConfig,
+			)
 		}
-		return tls.DialWithDialer(&net.Dialer{Timeout: DefaultDialTimeout}, network, addr, config)
+
+		if err != nil {
+			c.logger.Log(
+				"level", 0,
+				"action", "dial failed",
+				"network", network,
+				"addr", addr,
+				"err", err,
+			)
+		}
+
+		return
 	}
 
 	b := c.config.Backoff
@@ -114,55 +162,92 @@ func (c *Client) dial(network, addr string, config *tls.Config) (net.Conn, error
 
 	for {
 		conn, err := doDial()
+
 		// success
 		if err == nil {
 			b.Reset()
 			return conn, err
 		}
 
-		d := b.NextBackOff()
 		// failure
+		d := b.NextBackOff()
 		if d < 0 {
 			return conn, fmt.Errorf("backoff limit exeded: %s", err)
 		}
+
+		// backoff
+		c.logger.Log(
+			"level", 1,
+			"action", "backoff",
+			"network", network,
+			"addr", addr,
+			"sleep", d,
+		)
 		time.Sleep(d)
 	}
 }
 
 func (c *Client) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodConnect {
-		c.log.Info("Connected to server: %s", r.RemoteAddr)
-		http.Error(w, "Nice to see you", http.StatusOK)
+		c.handleHandshake(w, r)
 		return
 	}
 
 	msg, err := proto.ParseControlMessage(r.Header)
 	if err != nil {
-		c.log.Warning("Parsing control message failed: %s", err)
+		c.logger.Log(
+			"level", 1,
+			"err", err,
+		)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	c.log.Debug("Start %s", msg)
+	c.logger.Log(
+		"level", 2,
+		"action", "handle",
+		"ctrlMsg", msg,
+	)
 	switch msg.Action {
 	case proto.Proxy:
 		c.config.Proxy(w, r.Body, msg)
 	default:
-		c.log.Warning("Unknown action: %s", msg)
+		c.logger.Log(
+			"level", 0,
+			"msg", "unknown action",
+			"ctrlMsg", msg,
+		)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
-	c.log.Debug("Done %s", msg)
+	c.logger.Log(
+		"level", 2,
+		"action", "done",
+		"ctrlMsg", msg,
+	)
+}
+
+func (c *Client) handleHandshake(w http.ResponseWriter, r *http.Request) {
+	c.logger.Log(
+		"level", 1,
+		"action", "handshake",
+		"addr", r.RemoteAddr,
+	)
+	http.Error(w, "Nice to see you", http.StatusOK)
 }
 
 // Stop closes the connection between client and server. After stopping client
 // can be started again.
-func (c *Client) Stop() error {
+func (c *Client) Stop() {
 	c.connMu.Lock()
 	defer c.connMu.Unlock()
 
-	if c.conn == nil {
-		return nil
+	c.logger.Log(
+		"level", 1,
+		"action", "stop",
+	)
+
+	if c.conn != nil {
+		c.conn.Close()
 	}
-	c.httpServer = nil
-	return c.conn.Close()
+	c.conn = nil
 }

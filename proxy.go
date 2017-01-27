@@ -3,7 +3,6 @@ package tunnel
 import (
 	"io"
 
-	"github.com/koding/logging"
 	"github.com/mmatczuk/tunnel/proto"
 )
 
@@ -31,7 +30,6 @@ func Proxy(p ProxyFuncs) ProxyFunc {
 		}
 
 		if f == nil {
-			logging.Error("Could not determine proxy function for %v", msg)
 			return
 		}
 

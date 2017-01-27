@@ -10,3 +10,19 @@
 1. Use of `sync.Pool` to avoid allocations of `ControlMessage`
 1. Stream compression
 1. UDP and IP proxing
+1. Add prometheus.io integration, replace transfer logs with gauges
+
+Not to forget README features
+
+1. HTTP/2
+1. server http.RoundTriper
+1. extensible Proxy architecture
+1. configurable HTTP proxy httputil.ReverseProxy
+1. structured logs, go kit logger compatible
+
+Log levels:
+
+* 0 - Critical, error something went really wrong
+* 1 - Info, something important happened
+* 2 - Debug
+* 3 - Trace, reserved for data transfer logs 

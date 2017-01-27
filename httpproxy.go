@@ -11,15 +11,13 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/koding/logging"
+	"github.com/mmatczuk/tunnel/log"
 	"github.com/mmatczuk/tunnel/proto"
 )
 
 // HTTPProxy forwards HTTP traffic.
 type HTTPProxy struct {
 	httputil.ReverseProxy
-	// Log is the proxy logger.
-	Log logging.Logger
 	// localURL specifies default base URL of local service.
 	localURL *url.URL
 	// localURLMap specifies mapping from ControlMessage ForwardedBy to
@@ -29,18 +27,24 @@ type HTTPProxy struct {
 	// * port
 	// * host
 	localURLMap map[string]*url.URL
+	// logger is the proxy logger.
+	logger log.Logger
 }
 
 // NewHTTPProxy creates a new direct HTTPProxy, everything will be proxied to
 // localURL.
-func NewHTTPProxy(localURL *url.URL) *HTTPProxy {
+func NewHTTPProxy(localURL *url.URL, logger log.Logger) *HTTPProxy {
 	if localURL == nil {
-		panic("Missing URL")
+		panic("Empty localURL")
+	}
+
+	if logger == nil {
+		logger = log.NewNopLogger()
 	}
 
 	p := &HTTPProxy{
-		Log:      logging.NewLogger("httpproxy"),
 		localURL: localURL,
+		logger:   logger,
 	}
 	p.ReverseProxy.Director = p.Director
 
@@ -50,14 +54,18 @@ func NewHTTPProxy(localURL *url.URL) *HTTPProxy {
 // NewMultiHTTPProxy creates a new dispatching HTTPProxy, requests may go to
 // different backends based on localURLMap, see HTTPProxy localURLMap docs for
 // more details.
-func NewMultiHTTPProxy(localURLMap map[string]*url.URL) *HTTPProxy {
+func NewMultiHTTPProxy(localURLMap map[string]*url.URL, logger log.Logger) *HTTPProxy {
 	if localURLMap == nil || len(localURLMap) == 0 {
-		panic("Missing URL map")
+		panic("Empty localURLMap")
+	}
+
+	if logger == nil {
+		logger = log.NewNopLogger()
 	}
 
 	p := &HTTPProxy{
-		Log:         logging.NewLogger("httpproxy"),
 		localURLMap: localURLMap,
+		logger:      logger,
 	}
 	p.ReverseProxy.Director = p.Director
 
@@ -77,7 +85,11 @@ func (p *HTTPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessag
 
 	req, err := http.ReadRequest(bufio.NewReader(r))
 	if err != nil {
-		p.Log.Warning("Failed to read request: %s", err)
+		p.logger.Log(
+			"level", 1,
+			"msg", "failed to read request",
+			"err", err,
+		)
 		return
 	}
 	req.URL.Host = msg.ForwardedBy
@@ -91,8 +103,15 @@ func (p *HTTPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessag
 func (p *HTTPProxy) Director(req *http.Request) {
 	target := p.localURLFor(req.URL)
 	if target == nil {
+		p.logger.Log(
+			"level", 1,
+			"msg", "no target",
+			"url", req.URL,
+		)
+
 		_, cancel := context.WithCancel(req.Context())
 		cancel()
+
 		return
 	}
 

@@ -6,11 +6,11 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/koding/logging"
+	"github.com/mmatczuk/tunnel/log"
 	"github.com/mmatczuk/tunnel/proto"
 )
 
-func proxyRequest(host string, msg *proto.ControlMessage, r io.Reader) *http.Request {
+func clientRequest(host string, msg *proto.ControlMessage, r io.Reader) *http.Request {
 	if msg.Action != proto.Proxy {
 		panic("Invalid action")
 	}
@@ -43,13 +43,14 @@ type closeReader interface {
 	CloseRead() error
 }
 
-// TransferLog is a dedicated logger for reporting bytes read/written.
-var TransferLog = logging.NewLogger("transfer")
-
-func transfer(side string, dst io.Writer, src io.ReadCloser) {
+func transfer(dst io.Writer, src io.ReadCloser, logger log.Logger) {
 	n, err := io.Copy(dst, src)
 	if err != nil {
-		TransferLog.Error("%s: copy error: %s", side, err)
+		logger.Log(
+			"level", 2,
+			"msg", "copy error",
+			"err", err,
+		)
 	}
 
 	if d, ok := dst.(closeWriter); ok {
@@ -62,7 +63,11 @@ func transfer(side string, dst io.Writer, src io.ReadCloser) {
 		src.Close()
 	}
 
-	TransferLog.Debug("Coppied %d bytes from %s", n, side)
+	logger.Log(
+		"level", 3,
+		"action", "transfered",
+		"bytes", n,
+	)
 }
 
 func copyHeader(dst, src http.Header) {

@@ -15,6 +15,7 @@ import (
 
 	"github.com/andrew-d/id"
 	"github.com/mmatczuk/tunnel"
+	"github.com/mmatczuk/tunnel/log"
 	"github.com/mmatczuk/tunnel/tunneltest"
 )
 
@@ -36,6 +37,8 @@ type testContext struct {
 var ctx testContext
 
 func TestMain(m *testing.M) {
+	logger := log.NewFilterLogger(log.NewStdLogger(), 1)
+
 	// prepare server TCP listener
 	serverTCPListener, err := net.Listen("tcp", ":0")
 	if err != nil {
@@ -46,6 +49,7 @@ func TestMain(m *testing.M) {
 	// prepare tunnel server
 	cert, id := selfSignedCert()
 	s, err := tunnel.NewServer(&tunnel.ServerConfig{
+		Addr:      ":0",
 		TLSConfig: tunneltest.TLSConfig(cert),
 		AllowedClients: []*tunnel.AllowedClient{
 			{
@@ -54,12 +58,13 @@ func TestMain(m *testing.M) {
 				Listeners: []net.Listener{serverTCPListener},
 			},
 		},
+		Logger: log.NewContext(logger).WithPrefix("server", ":"),
 	})
 	if err != nil {
 		panic(err)
 	}
 	s.Start()
-	defer s.Close()
+	defer s.Stop()
 
 	// run server HTTP interface
 	serverHTTPListener, err := net.Listen("tcp", ":0")
@@ -91,10 +96,12 @@ func TestMain(m *testing.M) {
 			Scheme: "http",
 			Host:   echoHTTPListener.Addr().String(),
 		},
-	})
+	}, log.NewNopLogger())
+
 	tcpproxy := tunnel.NewMultiTCPProxy(map[string]string{
 		port(serverTCPListener.Addr()): echoTCPListener.Addr().String(),
-	})
+	}, log.NewNopLogger())
+
 	proxy := tunnel.Proxy(tunnel.ProxyFuncs{
 		HTTP: httpproxy.Proxy,
 		TCP:  tcpproxy.Proxy,
@@ -105,6 +112,7 @@ func TestMain(m *testing.M) {
 		ServerAddr:      s.Addr(),
 		TLSClientConfig: tunneltest.TLSConfig(cert),
 		Proxy:           proxy,
+		Logger:          log.NewContext(logger).WithPrefix("client", ":"),
 	})
 	if err := c.Start(); err != nil {
 		panic(err)
