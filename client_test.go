@@ -13,6 +13,8 @@ import (
 )
 
 func TestClient_Dial(t *testing.T) {
+	t.Parallel()
+
 	s := httptest.NewTLSServer(nil)
 	defer s.Close()
 
@@ -35,6 +37,8 @@ func TestClient_Dial(t *testing.T) {
 }
 
 func TestClient_DialBackoff(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 

@@ -1,19 +1,19 @@
-// Package tunneltest contains common testing tools shared by unit tests,
-// benchmarks and third party tests.
-package tunneltest
+package integrationtest
 
 import (
-	"bytes"
 	"crypto/tls"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"mime"
+	"math/rand"
 	"net"
 	"net/http"
-	"os"
-	"path/filepath"
 )
+
+// Port returns port form TCP address.
+func Port(addr net.Addr) string {
+	return fmt.Sprint(addr.(*net.TCPAddr).Port)
+}
 
 // EchoHTTP starts serving HTTP requests on listener l, it accepts connections,
 // reads request body and writes is back in response.
@@ -43,36 +43,17 @@ func EchoTCP(l net.Listener) {
 	}
 }
 
-// ResponseBytes returns http response containing file as body.
-func ResponseBytes(file string) ([]byte, error) {
-	resp := &http.Response{
-		Status:     "200 OK",
-		StatusCode: 200,
-		Proto:      "HTTP/1.0",
-		ProtoMajor: 1,
-		ProtoMinor: 0,
-		Header:     make(http.Header),
-	}
-
-	ctype := mime.TypeByExtension(filepath.Ext(file))
-	if ctype == "" {
-		ctype = "application/octet-stream"
-	}
-	resp.Header.Set("Content-Type", ctype)
-
-	r, err := os.Open(file)
+// RandBytes creates a randomy initialised byte slice of length n.
+func RandBytes(n int) []byte {
+	b := make([]byte, n)
+	read, err := rand.Read(b)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file %q: %s", file, err)
+		panic(err)
 	}
-	defer r.Close()
-	resp.Body = r
-
-	b := new(bytes.Buffer)
-	if err := resp.Write(b); err != nil {
-		return nil, err
+	if read != n {
+		panic("Read did not fill whole slice")
 	}
-
-	return b.Bytes(), nil
+	return b
 }
 
 // TLSConfig returns valid http/2 tls configuration that can be used by both

@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -20,11 +21,12 @@ var (
 	DefaultDialTimeout = 10 * time.Second
 )
 
-// ClientConfig defines configuration for the Client.
+// ClientConfig is configuration of the Client.
 type ClientConfig struct {
 	// ServerAddr specifies TCP address of the tunnel server.
 	ServerAddr string
-	// TLSClientConfig specifies the tls configuration to use with tls.Client.
+	// TLSClientConfig specifies the tls configuration to use with
+	// tls.Client.
 	TLSClientConfig *tls.Config
 	// DialTLS specifies an optional dial function that creates a tls
 	// connection to the server. If DialTLS is nil, tls.Dial is used.
@@ -32,23 +34,13 @@ type ClientConfig struct {
 	// Backoff specifies wait before retry policy when server ch fails.
 	// If nil when ch fails it would immediately return error.
 	Backoff Backoff
+	// Tunnels specifies tunnels client requests to be opened on server.
+	Tunnels map[string]*proto.Tunnel
 	// Proxy is ProxyFunc responsible for transferring data between server
 	// and local services.
 	Proxy ProxyFunc
 	// Logger is optional logger. If nil no logs will be printed.
 	Logger log.Logger
-}
-
-// Backoff defines behavior of staggering reconnection retries.
-type Backoff interface {
-	// Next returns the duration to sleep before retrying to reconnect.
-	// If the returned value is negative, the retry is aborted.
-	NextBackOff() time.Duration
-
-	// Reset is used to signal a reconnection was successful and next
-	// call to Next should return desired time duration for 1st reconnection
-	// attempt.
-	Reset()
 }
 
 // Client is responsible for creating connection to the server, handling control
@@ -232,7 +224,21 @@ func (c *Client) handleHandshake(w http.ResponseWriter, r *http.Request) {
 		"action", "handshake",
 		"addr", r.RemoteAddr,
 	)
-	http.Error(w, "Nice to see you", http.StatusOK)
+
+	w.WriteHeader(http.StatusOK)
+
+	if c.config.Tunnels != nil {
+		b, err := json.Marshal(c.config.Tunnels)
+		if err != nil {
+			c.logger.Log(
+				"level", 0,
+				"msg", "handshake failed",
+				"err", err,
+			)
+			return
+		}
+		w.Write(b)
+	}
 }
 
 // Stop closes the connection between client and server. After stopping client

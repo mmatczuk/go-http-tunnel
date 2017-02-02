@@ -1,30 +1,31 @@
 package tunnel
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"sync"
 
 	"golang.org/x/net/http2"
+
+	"github.com/mmatczuk/tunnel/id"
 )
 
-var (
-	errNoClientConn           = errors.New("no connection")
-	errClientAlreadyConnected = errors.New("client already connected")
-)
+type connPair struct {
+	conn       net.Conn
+	clientConn *http2.ClientConn
+}
 
 type connPool struct {
 	t     *http2.Transport
+	conns map[string]connPair // key is host:port
 	mu    sync.RWMutex
-	conns map[string]*http2.ClientConn // key is host:port
 }
 
 func newConnPool(t *http2.Transport) *connPool {
 	return &connPool{
 		t:     t,
-		conns: make(map[string]*http2.ClientConn),
+		conns: make(map[string]connPair),
 	}
 }
 
@@ -32,49 +33,64 @@ func (p *connPool) GetClientConn(req *http.Request, addr string) (*http2.ClientC
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	if cc, ok := p.conns[addr]; ok && cc.CanTakeNewRequest() {
-		return cc, nil
+	if cp, ok := p.conns[addr]; ok && cp.clientConn.CanTakeNewRequest() {
+		return cp.clientConn, nil
 	}
 
-	return nil, errNoClientConn
+	return nil, errClientNotConnected
 }
 
 func (p *connPool) MarkDead(c *http2.ClientConn) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	for k, v := range p.conns {
-		if v == c {
-			delete(p.conns, k)
+	for identifier, cp := range p.conns {
+		if cp.clientConn == c {
+			cp.conn.Close()
+			delete(p.conns, identifier)
+			return
 		}
-		break
 	}
 }
 
-func (p *connPool) addHostConn(host string, conn net.Conn) error {
+func (p *connPool) AddConn(conn net.Conn, identifier id.ID) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if _, ok := p.conns[host]; ok {
+	addr := p.addr(identifier)
+
+	if _, ok := p.conns[addr]; ok {
 		return errClientAlreadyConnected
 	}
 
-	cc, err := p.t.NewClientConn(conn)
+	c, err := p.t.NewClientConn(conn)
 	if err != nil {
 		return err
 	}
-
-	p.conns[hostPort(host)] = cc
+	p.conns[addr] = connPair{
+		conn:       conn,
+		clientConn: c,
+	}
 
 	return nil
 }
 
-func (p *connPool) markHostDead(host string) {
+func (p *connPool) DeleteConn(identifier id.ID) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	delete(p.conns, hostPort(host))
+
+	addr := p.addr(identifier)
+
+	if cp, ok := p.conns[addr]; ok {
+		cp.conn.Close()
+		delete(p.conns, addr)
+	}
 }
 
-func hostPort(host string) string {
-	return fmt.Sprint(host, ":443")
+func (p *connPool) URL(identifier id.ID) string {
+	return fmt.Sprint("https://", identifier)
+}
+
+func (p *connPool) addr(identifier id.ID) string {
+	return fmt.Sprint(identifier.String(), ":443")
 }

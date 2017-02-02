@@ -7,6 +7,8 @@ import (
 )
 
 func TestControlMessage_WriteParse(t *testing.T) {
+	t.Parallel()
+
 	msg := &ControlMessage{
 		Protocol:     "tcp",
 		ForwardedFor: "127.0.0.1:58104",
