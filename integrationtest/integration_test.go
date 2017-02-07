@@ -1,4 +1,4 @@
-package tunnel_test
+package integrationtest
 
 import (
 	"bytes"
@@ -6,17 +6,15 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
 	"testing"
 	"time"
 
-	"github.com/andrew-d/id"
 	"github.com/mmatczuk/tunnel"
+	"github.com/mmatczuk/tunnel/id"
 	"github.com/mmatczuk/tunnel/log"
-	"github.com/mmatczuk/tunnel/tunneltest"
 )
 
 const (
@@ -47,20 +45,21 @@ func TestMain(m *testing.M) {
 	defer serverTCPListener.Close()
 
 	// prepare tunnel server
-	cert, id := selfSignedCert()
+	cert, identifier := selfSignedCert()
 	s, err := tunnel.NewServer(&tunnel.ServerConfig{
 		Addr:      ":0",
-		TLSConfig: tunneltest.TLSConfig(cert),
-		AllowedClients: []*tunnel.AllowedClient{
-			{
-				ID:        id,
-				Host:      "localhost",
-				Listeners: []net.Listener{serverTCPListener},
-			},
-		},
-		Logger: log.NewContext(logger).WithPrefix("server", ":"),
+		TLSConfig: TLSConfig(cert),
+		Logger:    log.NewContext(logger).WithPrefix("server", ":"),
 	})
 	if err != nil {
+		panic(err)
+	}
+
+	s.Subscribe(identifier)
+	if err := s.AddHost("localhost", identifier); err != nil {
+		panic(err)
+	}
+	if err := s.AddListener(serverTCPListener, identifier); err != nil {
 		panic(err)
 	}
 	s.Start()
@@ -80,7 +79,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	defer echoTCPListener.Close()
-	go tunneltest.EchoTCP(echoTCPListener)
+	go EchoTCP(echoTCPListener)
 
 	// prepare local HTTP echo service
 	echoHTTPListener, err := net.Listen("tcp", ":0")
@@ -88,18 +87,18 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	defer echoHTTPListener.Close()
-	go tunneltest.EchoHTTP(echoHTTPListener)
+	go EchoHTTP(echoHTTPListener)
 
 	// prepare proxy
 	httpproxy := tunnel.NewMultiHTTPProxy(map[string]*url.URL{
-		"localhost:" + port(serverHTTPListener.Addr()): {
+		"localhost:" + Port(serverHTTPListener.Addr()): {
 			Scheme: "http",
 			Host:   echoHTTPListener.Addr().String(),
 		},
 	}, log.NewNopLogger())
 
 	tcpproxy := tunnel.NewMultiTCPProxy(map[string]string{
-		port(serverTCPListener.Addr()): echoTCPListener.Addr().String(),
+		Port(serverTCPListener.Addr()): echoTCPListener.Addr().String(),
 	}, log.NewNopLogger())
 
 	proxy := tunnel.Proxy(tunnel.ProxyFuncs{
@@ -110,7 +109,7 @@ func TestMain(m *testing.M) {
 	// prepare tunnel client
 	c := tunnel.NewClient(&tunnel.ClientConfig{
 		ServerAddr:      s.Addr(),
-		TLSClientConfig: tunneltest.TLSConfig(cert),
+		TLSClientConfig: TLSConfig(cert),
 		Proxy:           proxy,
 		Logger:          log.NewContext(logger).WithPrefix("client", ":"),
 	})
@@ -124,32 +123,6 @@ func TestMain(m *testing.M) {
 	ctx.payload = randPayload(payloadInitialSize, payloadLen)
 
 	m.Run()
-}
-
-func port(addr net.Addr) string {
-	return fmt.Sprint(addr.(*net.TCPAddr).Port)
-}
-
-func randPayload(initialSize, n int) [][]byte {
-	payload := make([][]byte, n)
-	l := initialSize
-	for i := 0; i < n; i++ {
-		payload[i] = randBytes(l)
-		l *= 2
-	}
-	return payload
-}
-
-func randBytes(n int) []byte {
-	b := make([]byte, n)
-	read, err := rand.Read(b)
-	if err != nil {
-		panic(err)
-	}
-	if read != n {
-		panic("Read did not fill whole slice")
-	}
-	return b
 }
 
 func TestProxying(t *testing.T) {
@@ -168,55 +141,55 @@ func TestProxying(t *testing.T) {
 
 	for _, tt := range data {
 		tt := tt
-		name := fmt.Sprintf("%s/%s", tt.protocol, tt.name)
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			switch tt.protocol {
-			case "http":
-				testHTTP(t, tt.seq)
-			case "tcp":
-				testTCP(t, tt.seq)
-			default:
-				panic("Unexpected network type")
-			}
-		})
-	}
-}
-
-func testHTTP(t *testing.T, seq []uint) {
-	for idx, s := range seq {
-		for s > 0 {
-			url := fmt.Sprintf("http://localhost:%s/some/path", port(ctx.httpAddr))
-			r, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(ctx.payload[idx]))
-			if err != nil {
-				panic("Failed to create request")
-			}
-			resp, err := http.DefaultClient.Do(r)
-			if err != nil {
-				panic(fmt.Sprintf("HTTP error %s", err))
-			}
-			if resp.StatusCode != http.StatusOK {
-				t.Error("Unexpected status code", resp)
-			}
-			if resp.Body == nil {
-				t.Error("No body")
-			}
-
-			b, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				t.Error("Read error")
-			}
-
-			n, m := len(b), len(ctx.payload[idx])
-			if n != m {
-				t.Error("Read mismatch", n, m)
-			}
-			s--
+		for idx, repeat := range tt.seq {
+			name := fmt.Sprintf("%s/%s/%d", tt.protocol, tt.name, idx)
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+				switch tt.protocol {
+				case "http":
+					testHTTP(t, ctx.payload[idx], repeat)
+				case "tcp":
+					testTCP(t, ctx.payload[idx], repeat)
+				default:
+					panic("Unexpected network type")
+				}
+			})
 		}
 	}
 }
 
-func testTCP(t *testing.T, seq []uint) {
+func testHTTP(t *testing.T, payload []byte, repeat uint) {
+	for repeat > 0 {
+		url := fmt.Sprintf("http://localhost:%s/some/path", Port(ctx.httpAddr))
+		r, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(payload))
+		if err != nil {
+			panic("Failed to create request")
+		}
+		resp, err := http.DefaultClient.Do(r)
+		if err != nil {
+			panic(fmt.Sprintf("HTTP error %s", err))
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Error("Unexpected status code", resp)
+		}
+		if resp.Body == nil {
+			t.Error("No body")
+		}
+
+		b, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			t.Error("Read error")
+		}
+
+		n, m := len(b), len(payload)
+		if n != m {
+			t.Error("Write read mismatch", n, m)
+		}
+		repeat--
+	}
+}
+
+func testTCP(t *testing.T, payload []byte, repeat uint) {
 	conn, err := net.Dial("tcp", ctx.tcpAddr.String())
 	if err != nil {
 		t.Fatal("Dial failed", err)
@@ -225,27 +198,22 @@ func testTCP(t *testing.T, seq []uint) {
 
 	var buf = bigBuffer()
 	var read, write int
-	for idx, s := range seq {
-		for s > 0 {
-			m, err := conn.Write(ctx.payload[idx])
-			if err != nil {
-				t.Error("Write failed", err)
-			}
-			if m != len(ctx.payload[idx]) {
-				t.Log("Write mismatch", m, len(ctx.payload[idx]))
-			}
-			write += m
-
-			n, err := conn.Read(buf)
-			if err != nil {
-				t.Error("Read failed", err)
-			}
-			if n != m {
-				t.Log("Read mismatch", n, m)
-			}
-			read += n
-			s--
+	for repeat > 0 {
+		m, err := conn.Write(payload)
+		if err != nil {
+			t.Error("Write failed", err)
 		}
+		if m != len(payload) {
+			t.Log("Write mismatch", m, len(payload))
+		}
+		write += m
+
+		n, err := conn.Read(buf)
+		if err != nil {
+			t.Error("Read failed", err)
+		}
+		read += n
+		repeat--
 	}
 
 	for read < write {
@@ -263,6 +231,20 @@ func testTCP(t *testing.T, seq []uint) {
 	}
 }
 
+func bigBuffer() []byte {
+	return make([]byte, len(ctx.payload[len(ctx.payload)-1]))
+}
+
+func randPayload(initialSize, n int) [][]byte {
+	payload := make([][]byte, n)
+	l := initialSize
+	for i := 0; i < n; i++ {
+		payload[i] = RandBytes(l)
+		l *= 2
+	}
+	return payload
+}
+
 func selfSignedCert() (tls.Certificate, id.ID) {
 	cert, err := tls.LoadX509KeyPair("./test-fixtures/selfsigned.crt", "./test-fixtures/selfsigned.key")
 	if err != nil {
@@ -274,8 +256,4 @@ func selfSignedCert() (tls.Certificate, id.ID) {
 	}
 
 	return cert, id.New(x509Cert.Raw)
-}
-
-func bigBuffer() []byte {
-	return make([]byte, len(ctx.payload[len(ctx.payload)-1]))
 }

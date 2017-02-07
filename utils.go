@@ -1,39 +1,11 @@
 package tunnel
 
 import (
-	"fmt"
 	"io"
-	"net"
 	"net/http"
 
 	"github.com/mmatczuk/tunnel/log"
-	"github.com/mmatczuk/tunnel/proto"
 )
-
-func clientRequest(host string, msg *proto.ControlMessage, r io.Reader) *http.Request {
-	if msg.Action != proto.Proxy {
-		panic("Invalid action")
-	}
-	req, err := http.NewRequest(http.MethodPut, clientURL(host), r)
-	if err != nil {
-		panic(fmt.Sprintf("Could not create request: %s", err))
-	}
-	msg.Update(req.Header)
-
-	return req
-}
-
-func clientURL(host string) string {
-	return fmt.Sprint("https://", host)
-}
-
-func trimPort(hostPort string) (host string) {
-	host, _, _ = net.SplitHostPort(hostPort)
-	if host == "" {
-		host = hostPort
-	}
-	return
-}
 
 type closeWriter interface {
 	CloseWrite() error

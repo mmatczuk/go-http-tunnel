@@ -1,16 +1,14 @@
-package tunnel
+package id
 
 import (
 	"crypto/tls"
 	"fmt"
-
-	"github.com/andrew-d/id"
 )
 
 var emptyID [32]byte
 
-// peerID is modified https://github.com/andrew-d/ptls/blob/b89c7dcc94630a77f225a48befd3710144c7c10e/ptls.go#L81
-func peerID(conn *tls.Conn) (id.ID, error) {
+// PeerID is modified https://github.com/andrew-d/ptls/blob/b89c7dcc94630a77f225a48befd3710144c7c10e/ptls.go#L81
+func PeerID(conn *tls.Conn) (ID, error) {
 	// Try a TLS connection over the given connection. We explicitly perform
 	// the handshake, since we want to maintain the invariant that, if this
 	// function returns successfully, then the connection should be valid
@@ -29,7 +27,7 @@ func peerID(conn *tls.Conn) (id.ID, error) {
 
 	// Get remote cert's ID.
 	remoteCert := certs[0]
-	remoteID := id.New(remoteCert.Raw)
+	remoteID := New(remoteCert.Raw)
 
 	return remoteID, nil
 }
