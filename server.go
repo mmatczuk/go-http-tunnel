@@ -267,7 +267,7 @@ func (s *Server) AddTunnels(tunnels map[string]*proto.Tunnel, identifier id.ID) 
 	for name, t := range tunnels {
 		switch t.Protocol {
 		case proto.HTTP:
-			err = s.AddHost(t.Host, identifier)
+			err = s.AddHost(t.Host, NewAuth(t.Auth), identifier)
 			if err != nil {
 				goto rollback
 			}
@@ -399,6 +399,11 @@ func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMe
 // ServeHTTP proxies http connection to the client.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resp, err := s.RoundTrip(r)
+
+	if err == errUnauthorised {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
@@ -424,9 +429,15 @@ func (s *Server) RoundTrip(r *http.Request) (*http.Response, error) {
 		ForwardedBy:  r.Host,
 	}
 
-	identifier, ok := s.Subscriber(r.Host)
+	identifier, auth, ok := s.Subscriber(r.Host)
 	if !ok {
-		return nil, fmt.Errorf("proxy request error: %s", errClientNotSubscribed)
+		return nil, errClientNotSubscribed
+	}
+	if auth != nil {
+		user, password, _ := r.BasicAuth()
+		if auth.User != user || auth.Password != password {
+			return nil, errUnauthorised
+		}
 	}
 
 	return s.proxyHTTP(identifier, r, msg)
