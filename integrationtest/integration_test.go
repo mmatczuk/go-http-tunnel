@@ -56,7 +56,13 @@ func TestMain(m *testing.M) {
 	}
 
 	s.Subscribe(identifier)
-	if err := s.AddHost("localhost", identifier); err != nil {
+
+	auth := &tunnel.Auth{
+		User:     "user",
+		Password: "password",
+	}
+
+	if err := s.AddHost("localhost", auth, identifier); err != nil {
 		panic(err)
 	}
 	if err := s.AddListener(serverTCPListener, identifier); err != nil {
@@ -165,6 +171,8 @@ func testHTTP(t *testing.T, payload []byte, repeat uint) {
 		if err != nil {
 			panic("Failed to create request")
 		}
+		r.SetBasicAuth("user", "password")
+
 		resp, err := http.DefaultClient.Do(r)
 		if err != nil {
 			panic(fmt.Sprintf("HTTP error %s", err))

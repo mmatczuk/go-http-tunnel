@@ -1,7 +1,6 @@
 Release 1.0
 
 1. cli: cli and file configuration based on ngrok2 https://ngrok.com/docs#config
-1. security: basic auth on server
 1. docs: README update
 
 Backlog

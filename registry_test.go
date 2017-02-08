@@ -2,60 +2,157 @@ package tunnel
 
 import (
 	"net"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/mmatczuk/tunnel/id"
 )
 
-func TestRegistry_Subscribe(t *testing.T) {
+var (
+	a = id.NewFromString("A")
+	b = id.NewFromString("B")
+)
+
+func TestRegistry_IsSubscribed(t *testing.T) {
 	t.Parallel()
 
 	r := newRegistry()
-	r.Subscribe(id.NewFromString("A"))
+	r.Subscribe(a)
 
-	if ok := r.IsSubscribed(id.NewFromString("A")); !ok {
+	if !r.IsSubscribed(a) {
 		t.Fatal("Client should be subscribed")
 	}
-
-	if i := r.Unsubscribe(id.NewFromString("A")); i == nil {
-		t.Fatal("Unsubscribe should return RegistryItem")
-	}
-	if i := r.Unsubscribe(id.NewFromString("A")); i != nil {
-		t.Fatal("Unsubscribe for not existing client should return null")
+	if r.IsSubscribed(b) {
+		t.Fatal("Client should not be subscribed")
 	}
 }
 
-func TestRegistry_AddHost(t *testing.T) {
+func TestRegistry_UnsubscribeOnce(t *testing.T) {
 	t.Parallel()
 
 	r := newRegistry()
-	if err := r.AddHost("foobar", id.NewFromString("A")); err != errClientNotSubscribed {
-		t.Fatal("AddHost to not subscribed client should fail")
+	r.Subscribe(a)
+
+	if r.Unsubscribe(a) == nil {
+		t.Fatal("Unsubscribe should return RegistryItem")
+	}
+	if r.Unsubscribe(a) != nil {
+		t.Fatal("Unsubscribe should return nil")
+	}
+}
+
+func TestRegistry_UnsubscribeReturnsHosts(t *testing.T) {
+	t.Parallel()
+
+	r := newRegistry()
+	r.Subscribe(a)
+	r.AddHost("host0", nil, a)
+	r.AddHost("host1", nil, a)
+
+	i := r.Unsubscribe(a)
+	if !reflect.DeepEqual(i.Hosts, []string{"host0", "host1"}) {
+		t.Fatal("RegistryItem should contain hosts")
+	}
+}
+
+func TestRegistry_UnsubscribeReturnsListeners(t *testing.T) {
+	t.Parallel()
+
+	l0 := &net.TCPListener{}
+	l1 := &net.TCPListener{}
+
+	r := newRegistry()
+	r.Subscribe(a)
+	r.AddListener(l0, a)
+	r.AddListener(l1, a)
+
+	i := r.Unsubscribe(a)
+	if !reflect.DeepEqual(i.Listeners, []net.Listener{l0, l1}) {
+		t.Fatal("RegistryItem should contain hosts")
+	}
+}
+
+func TestRegistry_AddHostOnlyToSubscribed(t *testing.T) {
+	t.Parallel()
+
+	r := newRegistry()
+	if err := r.AddHost("host0", nil, a); err != errClientNotSubscribed {
+		t.Fatal("Adding host should be possible to subscribned clients only")
+	}
+}
+
+func TestRegistry_AddHostAuth(t *testing.T) {
+	t.Parallel()
+
+	r := newRegistry()
+	r.Subscribe(a)
+	r.AddHost("host0", &Auth{User: "A", Password: "B"}, a)
+
+	_, auth, _ := r.Subscriber("host0")
+	if !reflect.DeepEqual(auth, &Auth{User: "A", Password: "B"}) {
+		t.Fatal("Expected auth")
+	}
+}
+
+func TestRegistry_AddHostTrimsPort(t *testing.T) {
+	t.Parallel()
+
+	r := newRegistry()
+	r.Subscribe(a)
+	r.AddHost("host0", nil, a)
+	r.AddHost("host1:80", nil, a)
+
+	tests := []string{
+		"host0",
+		"host0:80",
+		"host0:8080",
+		"host1",
+		"host1:80",
+		"host1:8080",
 	}
 
-	r.Subscribe(id.NewFromString("A"))
+	for _, tt := range tests {
+		identifier, auth, ok := r.Subscriber(tt)
+		if !ok {
+			t.Fatal("Subscriber not found")
+		}
+		if auth != nil {
+			t.Fatal("Unexpeted auth")
+		}
+		if identifier != a {
+			t.Fatal("Unexpeted identifier")
+		}
+	}
+}
 
-	if err := r.AddHost("foobar:8080", id.NewFromString("A")); err != nil {
-		t.Fatal("AddHost should succeed")
+func TestRegistry_AddHostOnce(t *testing.T) {
+	t.Parallel()
+
+	r := newRegistry()
+	r.Subscribe(a)
+	r.AddHost("host0", nil, a)
+
+	tests := []string{
+		"host0",
+		"host0:80",
+		"host0:8080",
 	}
 
-	r.Subscribe(id.NewFromString("B"))
-
-	if err := r.AddHost("foobar", id.NewFromString("B")); err == nil {
-		t.Fatal("AddHost for duplicate host should fail")
+	for _, tt := range tests {
+		if err := r.AddHost(tt, nil, a); !strings.Contains(err.Error(), "occupied") {
+			t.Log(tt)
+			t.Errorf("Adding host %q should fail", tt)
+		}
 	}
 
-	if identifier, ok := r.Subscriber("foobar"); !ok || identifier != id.NewFromString("A") {
-		t.Fatal("Wrong subscriber")
-	}
-	if identifier, ok := r.Subscriber("foobar:8080"); !ok || identifier != id.NewFromString("A") {
-		t.Fatal("Wrong subscriber")
-	}
+	r.Subscribe(b)
 
-	r.Unsubscribe(id.NewFromString("A"))
-
-	if err := r.AddHost("foobar", id.NewFromString("B")); err != nil {
-		t.Fatal("Unsubsribe failed to remove host")
+	for _, tt := range tests {
+		if err := r.AddHost(tt, nil, b); !strings.Contains(err.Error(), "occupied") {
+			t.Log(err)
+			t.Errorf("Adding host %q should fail", tt)
+		}
 	}
 }
 
@@ -63,49 +160,71 @@ func TestRegistry_DeleteHost(t *testing.T) {
 	t.Parallel()
 
 	r := newRegistry()
-	r.Subscribe(id.NewFromString("A"))
+	r.Subscribe(a)
+	r.AddHost("host0", nil, a)
 
-	if err := r.AddHost("foobar:8080", id.NewFromString("A")); err != nil {
-		t.Fatal("AddHost should succeed")
+	r.DeleteHost("host0", a)
+
+	if _, _, ok := r.Subscriber("host0"); ok {
+		t.Fatal("Should delete host for a")
 	}
 
-	if identifier, ok := r.Subscriber("foobar"); !ok || identifier != id.NewFromString("A") {
-		t.Fatal("Wrong subscriber")
-	}
-
-	if err := r.AddHost("foobar:8080", id.NewFromString("A")); err == nil {
-		t.Fatal("AddHost for duplicate host should fail")
-	}
-
-	r.DeleteHost("foobar", id.NewFromString("A"))
-
-	if _, ok := r.Subscriber("foobar"); ok {
-		t.Fatal("DeleteHost failed to delete host")
-	}
-
-	if err := r.AddHost("foobar:8080", id.NewFromString("A")); err != nil {
-		t.Fatal("AddHost should succeed")
-	}
-
-	r.Subscribe(id.NewFromString("B"))
-	r.DeleteHost("foobar", id.NewFromString("B"))
-
-	if _, ok := r.Subscriber("foobar"); !ok {
-		t.Fatal("DeleteHost forgein host should have no effect")
+	i := r.Unsubscribe(a)
+	if len(i.Hosts) != 0 {
+		t.Fatal("Host was not deleted from item")
 	}
 }
 
-func TestRegistry_AddListener(t *testing.T) {
+func TestRegistry_DeleteOnlyOwnedHost(t *testing.T) {
 	t.Parallel()
 
 	r := newRegistry()
-	if err := r.AddListener(&net.TCPListener{}, id.NewFromString("A")); err != errClientNotSubscribed {
-		t.Fatal("AddListener to not subscribed client should fail")
+	r.Subscribe(a)
+	r.AddHost("host0", nil, a)
+
+	r.DeleteHost("host0", b)
+
+	if _, _, ok := r.Subscriber("host0"); !ok {
+		t.Fatal("Should not delete host for b")
 	}
+}
 
-	r.Subscribe(id.NewFromString("A"))
+func TestRegistry_AddListenerOnlyToSubscribed(t *testing.T) {
+	t.Parallel()
 
-	if err := r.AddListener(&net.TCPListener{}, id.NewFromString("A")); err != nil {
-		t.Fatal("AddListener should succeed")
+	r := newRegistry()
+	if err := r.AddListener(&net.TCPListener{}, a); err != errClientNotSubscribed {
+		t.Fatal("Adding listener should be possible to subscribned clients only")
+	}
+}
+
+func TestRegistry_AddListenerOnce(t *testing.T) {
+	t.Parallel()
+
+	l := &net.TCPListener{}
+
+	r := newRegistry()
+	r.Subscribe(a)
+	r.AddListener(l, a)
+
+	if err := r.AddListener(l, a); err == nil {
+		t.Fatal("Adding listenr should fail")
+	}
+}
+
+func TestRegistry_DeleteListener(t *testing.T) {
+	t.Parallel()
+
+	l := &net.TCPListener{}
+
+	r := newRegistry()
+	r.Subscribe(a)
+	r.AddListener(l, a)
+
+	r.DeleteListener(l, a)
+
+	i := r.Unsubscribe(a)
+	if len(i.Listeners) != 0 {
+		t.Fatal("Host was not deleted from item")
 	}
 }
