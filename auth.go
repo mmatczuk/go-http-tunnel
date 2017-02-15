@@ -8,7 +8,7 @@ type Auth struct {
 	Password string
 }
 
-// NewAuth creates new auth from string representation.
+// NewAuth creates new auth from string representation "user:password".
 func NewAuth(auth string) *Auth {
 	if auth == "" {
 		return nil

@@ -20,14 +20,15 @@ import (
 
 // ServerConfig defines configuration for the Server.
 type ServerConfig struct {
-	// Addr is tcp address to listen on for client connections, ":0" if empty.
+	// Addr is TCP address to listen for client connections. If empty ":0"
+	// is used.
 	Addr string
 	// TLSConfig specifies the tls configuration to use with tls.Listener.
 	TLSConfig *tls.Config
-	// Listener specifies optional listener that clients would connect to.
-	// If Listener is nil tls.Listen("tcp", Addr, TLSConfig) is used.
+	// Listener specifies optional listener for client connections. If nil
+	// tls.Listen("tcp", Addr, TLSConfig) is used.
 	Listener net.Listener
-	// Logger is optional logger. If nil no logs will be printed.
+	// Logger is optional logger. If nil logging is disabled.
 	Logger log.Logger
 }
 

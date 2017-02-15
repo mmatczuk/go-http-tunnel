@@ -30,15 +30,15 @@ type ClientConfig struct {
 	// DialTLS specifies an optional dial function that creates a tls
 	// connection to the server. If DialTLS is nil, tls.Dial is used.
 	DialTLS func(network, addr string, config *tls.Config) (net.Conn, error)
-	// Backoff specifies wait before retry policy when server ch fails.
-	// If nil when ch fails it would immediately return error.
+	// Backoff specifies backoff policy on server connection retry. If nil
+	// when dial fails it will not be retried.
 	Backoff Backoff
-	// Tunnels specifies tunnels client requests to be opened on server.
+	// Tunnels specifies the tunnels client requests to be opened on server.
 	Tunnels map[string]*proto.Tunnel
 	// Proxy is ProxyFunc responsible for transferring data between server
 	// and local services.
 	Proxy ProxyFunc
-	// Logger is optional logger. If nil no logs will be printed.
+	// Logger is optional logger. If nil logging is disabled.
 	Logger log.Logger
 }
 
@@ -84,9 +84,10 @@ func NewClient(config *ClientConfig) *Client {
 	return c
 }
 
-// Start connects client to the server, it returns error if there is a dial
-// error, otherwise it spawns a new goroutine with http/2 server handling
-// ControlMessages.
+// Start connects client to the server, it returns error if there is a
+// connection error, or server cannot open requested tunnels. On connection
+// error a backoff policy is used to reestablish the connection. When connected
+// HTTP/2 server is started to handle ControlMessages.
 func (c *Client) Start() error {
 	c.logger.Log(
 		"level", 1,
@@ -285,8 +286,7 @@ func (c *Client) handleHandshake(w http.ResponseWriter, r *http.Request) {
 	w.Write(b)
 }
 
-// Stop closes the connection between client and server. After stopping client
-// can be started again.
+// Stop disconnects client from server.
 func (c *Client) Stop() {
 	c.connMu.Lock()
 	defer c.connMu.Unlock()

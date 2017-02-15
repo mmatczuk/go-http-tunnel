@@ -9,8 +9,8 @@ type Logger interface {
 	Log(keyvals ...interface{}) error
 }
 
-// Context is simplified version of
-// [go-kit log Context](https://godoc.org/github.com/go-kit/kit/log#Context).
+// Context is simplified version of go-kit log Context
+// https://godoc.org/github.com/go-kit/kit/log#Context.
 type Context struct {
 	prefix []interface{}
 	suffix []interface{}
