@@ -10,6 +10,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/mmatczuk/tunnel/mock"
+	"github.com/mmatczuk/tunnel/proto"
 )
 
 func TestClient_Dial(t *testing.T) {
@@ -23,7 +24,8 @@ func TestClient_Dial(t *testing.T) {
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: true,
 		},
-		Proxy: Proxy(ProxyFuncs{}),
+		Tunnels: map[string]*proto.Tunnel{"test": {}},
+		Proxy:   Proxy(ProxyFuncs{}),
 	})
 
 	conn, err := c.dial()
@@ -57,6 +59,7 @@ func TestClient_DialBackoff(t *testing.T) {
 		TLSClientConfig: &tls.Config{},
 		DialTLS:         d,
 		Backoff:         b,
+		Tunnels:         map[string]*proto.Tunnel{"test": {}},
 		Proxy:           Proxy(ProxyFuncs{}),
 	})
 

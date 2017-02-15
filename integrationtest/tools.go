@@ -2,18 +2,12 @@ package integrationtest
 
 import (
 	"crypto/tls"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
 )
-
-// Port returns port form TCP address.
-func Port(addr net.Addr) string {
-	return fmt.Sprint(addr.(*net.TCPAddr).Port)
-}
 
 // EchoHTTP starts serving HTTP requests on listener l, it accepts connections,
 // reads request body and writes is back in response.

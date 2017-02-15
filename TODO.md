@@ -1,18 +1,18 @@
 Release 1.0
 
-1. cli: cli and file configuration based on ngrok2 https://ngrok.com/docs#config
-1. docs: README update
+1. docs: new README
 
 Backlog
 
+1. monitoring: client connection state machine
 1. monitoring: ping https://godoc.org/github.com/hashicorp/yamux#Session.Ping
+1. monitoring: prometheus.io integration
 1. proxy: WebSockets
-1. docs: demo
 1. proxy: UDP
+1. proxy: file system
+1. proxy: host_header modifier
 1. security: certificate signature checks
 1. cli: integrated certificate generation
-1. monitoring: prometheus.io integration
-
 
 Notes for README
 
