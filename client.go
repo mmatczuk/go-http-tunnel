@@ -11,8 +11,8 @@ import (
 
 	"golang.org/x/net/http2"
 
-	"github.com/mmatczuk/tunnel/log"
-	"github.com/mmatczuk/tunnel/proto"
+	"github.com/mmatczuk/go-http-tunnel/log"
+	"github.com/mmatczuk/go-http-tunnel/proto"
 )
 
 var (

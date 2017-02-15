@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"github.com/mmatczuk/tunnel/mock"
+	"github.com/mmatczuk/go-http-tunnel/mock"
 )
 
 func TestContext_Log(t *testing.T) {

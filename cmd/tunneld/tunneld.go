@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/google/gops/agent"
-	"github.com/mmatczuk/tunnel"
-	"github.com/mmatczuk/tunnel/cmd/cmd"
-	"github.com/mmatczuk/tunnel/id"
+	"github.com/mmatczuk/go-http-tunnel"
+	"github.com/mmatczuk/go-http-tunnel/cmd/cmd"
+	"github.com/mmatczuk/go-http-tunnel/id"
 )
 
 func main() {

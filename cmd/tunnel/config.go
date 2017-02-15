@@ -8,7 +8,7 @@ import (
 
 	"gopkg.in/yaml.v2"
 
-	"github.com/mmatczuk/tunnel/proto"
+	"github.com/mmatczuk/go-http-tunnel/proto"
 )
 
 type BackoffConfig struct {

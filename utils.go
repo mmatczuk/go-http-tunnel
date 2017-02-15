@@ -4,7 +4,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/mmatczuk/tunnel/log"
+	"github.com/mmatczuk/go-http-tunnel/log"
 )
 
 type closeWriter interface {

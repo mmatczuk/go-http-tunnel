@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/mmatczuk/tunnel/mock"
-	"github.com/mmatczuk/tunnel/proto"
+	"github.com/mmatczuk/go-http-tunnel/mock"
+	"github.com/mmatczuk/go-http-tunnel/proto"
 )
 
 func TestClient_Dial(t *testing.T) {

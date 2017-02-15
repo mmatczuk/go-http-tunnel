@@ -3,7 +3,7 @@ package tunnel
 import (
 	"io"
 
-	"github.com/mmatczuk/tunnel/proto"
+	"github.com/mmatczuk/go-http-tunnel/proto"
 )
 
 // ProxyFunc is responsible for forwarding a remote connection to local server

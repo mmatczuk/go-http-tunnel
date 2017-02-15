@@ -8,7 +8,7 @@ import (
 
 	"golang.org/x/net/http2"
 
-	"github.com/mmatczuk/tunnel/id"
+	"github.com/mmatczuk/go-http-tunnel/id"
 )
 
 type onDisconnectListener func(identifier id.ID)

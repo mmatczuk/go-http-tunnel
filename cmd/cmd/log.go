@@ -6,7 +6,7 @@ import (
 	"time"
 
 	kitlog "github.com/go-kit/kit/log"
-	"github.com/mmatczuk/tunnel/log"
+	"github.com/mmatczuk/go-http-tunnel/log"
 )
 
 // NewLogger returns logfmt based logger, printing messages up to log level

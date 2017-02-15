@@ -11,10 +11,10 @@ import (
 
 	"github.com/cenkalti/backoff"
 	"github.com/google/gops/agent"
-	"github.com/mmatczuk/tunnel"
-	"github.com/mmatczuk/tunnel/cmd/cmd"
-	"github.com/mmatczuk/tunnel/log"
-	"github.com/mmatczuk/tunnel/proto"
+	"github.com/mmatczuk/go-http-tunnel"
+	"github.com/mmatczuk/go-http-tunnel/cmd/cmd"
+	"github.com/mmatczuk/go-http-tunnel/log"
+	"github.com/mmatczuk/go-http-tunnel/proto"
 )
 
 func main() {
