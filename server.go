@@ -371,7 +371,7 @@ rollback:
 	return err
 }
 
-// Unsubscribe removes client from registy, disconnects client if already
+// Unsubscribe removes client from registry, disconnects client if already
 // connected and returns it's RegistryItem.
 func (s *Server) Unsubscribe(identifier id.ID) *RegistryItem {
 	s.connPool.DeleteConn(identifier)
