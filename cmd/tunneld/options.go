@@ -28,6 +28,7 @@ type options struct {
 	clients    string
 	logTo      string
 	logLevel   int
+	version    bool
 }
 
 func parseArgs() *options {
@@ -40,6 +41,7 @@ func parseArgs() *options {
 	clients := flag.String("clients", "", "Comma-separated list of tunnel client ids")
 	logTo := flag.String("log", "stdout", "Write log messages to this file, file name or 'stdout', 'stderr', 'none'")
 	logLevel := flag.Int("log-level", 1, "Level of messages to log, 0-3")
+	version := flag.Bool("version", false, "Prints tunneld version")
 	flag.Parse()
 
 	return &options{
@@ -52,5 +54,6 @@ func parseArgs() *options {
 		clients:    *clients,
 		logTo:      *logTo,
 		logLevel:   *logLevel,
+		version:    *version,
 	}
 }
