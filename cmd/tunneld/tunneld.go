@@ -16,6 +16,11 @@ import (
 func main() {
 	opts := parseArgs()
 
+	if opts.version {
+		fmt.Println(version)
+		return
+	}
+
 	if opts.debug {
 		if err := agent.Listen(nil); err != nil {
 			fatal("gops agent failed to start: %s", err)

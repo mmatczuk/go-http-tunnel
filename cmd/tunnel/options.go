@@ -51,6 +51,7 @@ type options struct {
 	config   string
 	logTo    string
 	logLevel int
+	version  bool
 	command  string
 	args     []string
 }
@@ -60,6 +61,7 @@ func parseArgs() (*options, error) {
 	config := flag.String("config", filepath.Join(defaultPath(), "config.yaml"), "Path to tunnel configuration file")
 	logTo := flag.String("log", "stdout", "Write log messages to this file, file name or 'stdout', 'stderr', 'none'")
 	logLevel := flag.Int("log-level", 1, "Level of messages to log, 0-3")
+	version := flag.Bool("version", false, "Prints tunnel version")
 	flag.Parse()
 
 	opts := &options{
@@ -67,7 +69,12 @@ func parseArgs() (*options, error) {
 		config:   *config,
 		logTo:    *logTo,
 		logLevel: *logLevel,
+		version:  *version,
 		command:  flag.Arg(0),
+	}
+
+	if opts.version {
+		return opts, nil
 	}
 
 	switch opts.command {
