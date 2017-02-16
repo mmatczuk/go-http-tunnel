@@ -13,15 +13,10 @@ addons:
     - moreutils
 
 before_install:
-  - go get -u github.com/golang/lint/golint
-  - go get -u github.com/golang/mock/gomock
+  - make devtools
 
 install:
   - go get -d ./...
-  - go build ./...
 
 script:
-  - gofmt -s -l . | ifne false
-  - go vet ./...
-  - $HOME/gopath/bin/golint ./...
-  - go test -race ./...
+  - make check

@@ -1,3 +1,6 @@
+### Release
+build
+
 ### GO
 *.cov
 *.prof
@@ -18,4 +21,3 @@ Session.vim
 *~
 # auto-generated tag files
 tags
-
