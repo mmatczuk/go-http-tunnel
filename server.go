@@ -106,7 +106,6 @@ func (s *Server) disconnected(identifier id.ID) {
 			"identifier", identifier,
 			"addr", l.Addr(),
 		)
-
 		l.Close()
 	}
 }
@@ -114,23 +113,32 @@ func (s *Server) disconnected(identifier id.ID) {
 // Start starts accepting connections form clients. For accepting http traffic
 // from end users server must be run as handler on http server.
 func (s *Server) Start() {
+	addr := s.listener.Addr().String()
+
 	s.logger.Log(
 		"level", 1,
 		"action", "start",
-		"addr", s.listener.Addr(),
+		"addr", addr,
 	)
 
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
-			s.logger.Log(
-				"level", 2,
-				"msg", "accept control connection failed",
-				"err", err,
-			)
 			if strings.Contains(err.Error(), "use of closed network connection") {
+				s.logger.Log(
+					"level", 1,
+					"action", "control connection listener closed",
+					"addr", addr,
+				)
 				return
 			}
+
+			s.logger.Log(
+				"level", 0,
+				"msg", "accept control connection failed",
+				"addr", addr,
+				"err", err,
+			)
 			continue
 		}
 
@@ -359,7 +367,7 @@ func (s *Server) addTunnels(tunnels map[string]*proto.Tunnel, identifier id.ID) 
 	}
 
 	for _, l := range i.Listeners {
-		s.listen(l, identifier)
+		go s.listen(l, identifier)
 	}
 
 	return nil
@@ -380,18 +388,28 @@ func (s *Server) Unsubscribe(identifier id.ID) *RegistryItem {
 }
 
 func (s *Server) listen(l net.Listener, identifier id.ID) {
+	addr := l.Addr().String()
+
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			s.logger.Log(
-				"level", 2,
-				"msg", "accept connection failed",
-				"identifier", identifier,
-				"err", err,
-			)
 			if strings.Contains(err.Error(), "use of closed network connection") {
+				s.logger.Log(
+					"level", 2,
+					"action", "listener closed",
+					"identifier", identifier,
+					"addr", addr,
+				)
 				return
 			}
+
+			s.logger.Log(
+				"level", 0,
+				"msg", "accept connection failed",
+				"identifier", identifier,
+				"addr", addr,
+				"err", err,
+			)
 			continue
 		}
 

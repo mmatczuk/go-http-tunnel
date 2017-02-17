@@ -106,5 +106,7 @@ func (p *connPool) addr(identifier id.ID) string {
 }
 
 func (p *connPool) addrToIdentifier(addr string) id.ID {
-	return id.NewFromString(addr[:len(addr)-4])
+	identifier := id.ID{}
+	identifier.UnmarshalText([]byte(addr[:len(addr)-4]))
+	return identifier
 }

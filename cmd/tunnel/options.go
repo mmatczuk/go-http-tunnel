@@ -4,8 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/user"
-	"path/filepath"
 )
 
 const usage1 string = `Usage: tunnel [OPTIONS] <command> [command args] [...]
@@ -58,7 +56,7 @@ type options struct {
 
 func parseArgs() (*options, error) {
 	debug := flag.Bool("debug", false, "Starts gops agent")
-	config := flag.String("config", filepath.Join(defaultPath(), "config.yaml"), "Path to tunnel configuration file")
+	config := flag.String("config", "tunnel.yaml", "Path to tunnel configuration file")
 	logTo := flag.String("log", "stdout", "Write log messages to this file, file name or 'stdout', 'stderr', 'none'")
 	logLevel := flag.Int("log-level", 1, "Level of messages to log, 0-3")
 	version := flag.Bool("version", false, "Prints tunnel version")
@@ -98,18 +96,4 @@ func parseArgs() (*options, error) {
 	}
 
 	return opts, nil
-}
-
-func defaultPath() string {
-	// user.Current() does not work on linux when cross compiling because
-	// it requires CGO; use os.Getenv("HOME") hack until we compile natively
-	var dir string
-
-	if user, err := user.Current(); err == nil {
-		dir = user.HomeDir
-	} else {
-		dir = os.Getenv("HOME")
-	}
-
-	return filepath.Join(dir, ".tunnel")
 }

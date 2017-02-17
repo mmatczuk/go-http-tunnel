@@ -2,10 +2,9 @@ package cmd
 
 import (
 	"io"
+	golog "log"
 	"os"
-	"time"
 
-	kitlog "github.com/go-kit/kit/log"
 	"github.com/mmatczuk/go-http-tunnel/log"
 )
 
@@ -29,9 +28,10 @@ func NewLogger(to string, level int) (log.Logger, error) {
 		w = f
 	}
 
-	var logger kitlog.Logger
-	logger = kitlog.NewJSONLogger(kitlog.NewSyncWriter(w))
-	logger = kitlog.NewContext(logger).WithPrefix("time", kitlog.Timestamp(time.Now))
+	golog.SetOutput(w)
+
+	var logger log.Logger
+	logger = log.NewStdLogger()
 	logger = log.NewFilterLogger(logger, level)
 	return logger, nil
 }

@@ -165,7 +165,7 @@ func (c *Client) dial() (net.Conn, error) {
 		if err != nil {
 			c.logger.Log(
 				"level", 0,
-				"action", "dial failed",
+				"msg", "dial failed",
 				"network", network,
 				"addr", addr,
 				"err", err,
@@ -199,8 +199,6 @@ func (c *Client) dial() (net.Conn, error) {
 		c.logger.Log(
 			"level", 1,
 			"action", "backoff",
-			"network", network,
-			"addr", addr,
 			"sleep", d,
 		)
 		time.Sleep(d)

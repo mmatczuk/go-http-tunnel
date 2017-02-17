@@ -146,8 +146,8 @@ func proxy(m map[string]*TunnelConfig, logger log.Logger) tunnel.ProxyFunc {
 	}
 
 	return tunnel.Proxy(tunnel.ProxyFuncs{
-		HTTP: tunnel.NewMultiHTTPProxy(httpURL, logger).Proxy,
-		TCP:  tunnel.NewMultiTCPProxy(tcpAddr, logger).Proxy,
+		HTTP: tunnel.NewMultiHTTPProxy(httpURL, log.NewContext(logger).WithPrefix("proxy", "HTTP")).Proxy,
+		TCP:  tunnel.NewMultiTCPProxy(tcpAddr, log.NewContext(logger).WithPrefix("proxy", "TCP")).Proxy,
 	})
 }
 
