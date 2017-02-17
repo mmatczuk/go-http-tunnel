@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 
+	"golang.org/x/net/http2"
+
 	"github.com/google/gops/agent"
 	"github.com/mmatczuk/go-http-tunnel"
 	"github.com/mmatczuk/go-http-tunnel/cmd/cmd"
@@ -75,10 +77,8 @@ func main() {
 				"action", "start http",
 				"addr", opts.httpAddr,
 			)
-			err := http.ListenAndServe(opts.httpAddr, server)
-			if err != nil {
-				fatal("failed to start HTTP: %s", err)
-			}
+
+			fatal("failed to start HTTP: %s", http.ListenAndServe(opts.httpAddr, server))
 		}()
 	}
 
@@ -90,10 +90,14 @@ func main() {
 				"action", "start https",
 				"addr", opts.httpsAddr,
 			)
-			err := http.ListenAndServeTLS(opts.httpsAddr, opts.tlsCrt, opts.tlsKey, server)
-			if err != nil {
-				fatal("failed to start HTTPS: %s", err)
+
+			s := &http.Server{
+				Addr:    opts.httpsAddr,
+				Handler: server,
 			}
+			http2.ConfigureServer(s, nil)
+
+			fatal("failed to start HTTPS: %s", s.ListenAndServeTLS(opts.tlsCrt, opts.tlsKey))
 		}()
 	}
 
