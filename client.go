@@ -46,12 +46,13 @@ type ClientConfig struct {
 // messages. It uses ProxyFunc for transferring data between server and local
 // services.
 type Client struct {
-	config     *ClientConfig
-	conn       net.Conn
-	connMu     sync.Mutex
-	httpServer *http2.Server
-	serverErr  error
-	logger     log.Logger
+	config         *ClientConfig
+	conn           net.Conn
+	connMu         sync.Mutex
+	httpServer     *http2.Server
+	serverErr      error
+	lastDisconnect time.Time
+	logger         log.Logger
 }
 
 // NewClient creates a new unconnected Client based on configuration. Caller
@@ -110,9 +111,17 @@ func (c *Client) Start() error {
 		)
 
 		c.connMu.Lock()
+		now := time.Now()
 		err = c.serverErr
+
+		// detect disconnect hiccup
+		if err == nil && now.Sub(c.lastDisconnect).Seconds() < 5 {
+			err = fmt.Errorf("disconnect hiccup, connection is being cut")
+		}
+
 		c.conn = nil
 		c.serverErr = nil
+		c.lastDisconnect = now
 		c.connMu.Unlock()
 
 		if err != nil {

@@ -161,6 +161,8 @@ func (s *Server) handleClient(conn net.Conn) {
 		tunnels    map[string]*proto.Tunnel
 		err        error
 		ok         bool
+
+		inConnPool bool
 	)
 
 	tlsConn, ok := conn.(*tls.Conn)
@@ -210,6 +212,7 @@ func (s *Server) handleClient(conn net.Conn) {
 		)
 		goto reject
 	}
+	inConnPool = true
 
 	req, err = http.NewRequest(http.MethodConnect, s.connPool.URL(identifier), nil)
 	if err != nil {
@@ -297,8 +300,12 @@ reject:
 		"action", "rejected",
 	)
 
-	s.notifyError(err, identifier)
-	s.connPool.DeleteConn(identifier)
+	if inConnPool {
+		s.notifyError(err, identifier)
+		s.connPool.DeleteConn(identifier)
+	}
+
+	conn.Close()
 }
 
 // notifyError tries to send error to client.
