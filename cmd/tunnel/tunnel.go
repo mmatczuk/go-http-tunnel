@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net/url"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/google/gops/agent"
 	"github.com/mmatczuk/go-http-tunnel"
 	"github.com/mmatczuk/go-http-tunnel/cmd/cmd"
+	"github.com/mmatczuk/go-http-tunnel/id"
 	"github.com/mmatczuk/go-http-tunnel/log"
 	"github.com/mmatczuk/go-http-tunnel/proto"
 )
@@ -46,6 +48,18 @@ func main() {
 	}
 
 	switch opts.command {
+	case "id":
+		cert, err := tls.LoadX509KeyPair(config.TLSCrt, config.TLSKey)
+		if err != nil {
+			fatal("failed to load key pair: %s", err)
+		}
+		x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
+		if err != nil {
+			fatal("failed to parse certificate: %s", err)
+		}
+		fmt.Println(id.New(x509Cert.Raw))
+
+		return
 	case "list":
 		var names []string
 		for n := range config.Tunnels {

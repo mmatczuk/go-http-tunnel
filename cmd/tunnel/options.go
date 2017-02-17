@@ -12,9 +12,10 @@ options:
 
 const usage2 string = `
 Commands:
+	tunnel id                      Show client identifier
+	tunnel list                    List tunnel names from config file
 	tunnel start [tunnel] [...]    Start tunnels by name from config file
 	tunnel start-all               Start all tunnels defined in config file
-	tunnel list                    List tunnel names from config file
 
 Examples:
 	tunnel start www ssh
@@ -76,7 +77,7 @@ func parseArgs() (*options, error) {
 	}
 
 	switch opts.command {
-	case "list":
+	case "id", "list":
 		opts.args = flag.Args()[1:]
 		if len(opts.args) > 0 {
 			return nil, fmt.Errorf("list takes no arguments")
