@@ -19,7 +19,7 @@ Commands:
 
 Examples:
 	tunnel start www ssh
-	tunnel -config=config.yaml -log=stdout -log-level 2 start ssh
+	tunnel -config config.yaml -log stdout -log-level 2 start ssh
 	tunnel start-all
 
 config.yaml:
@@ -35,6 +35,12 @@ config.yaml:
 	    proto: tcp
 	    addr: IP:22
 	    remote_addr: 0.0.0.0:2222
+
+Author:
+	Written by M. Matczuk (mmatczuk@gmail.com)
+
+Bugs:
+	Submit bugs to https://github.com/mmatczuk/go-http-tunnel/issues
 `
 
 func init() {
@@ -77,6 +83,9 @@ func parseArgs() (*options, error) {
 	}
 
 	switch opts.command {
+	case "":
+		flag.Usage()
+		os.Exit(2)
 	case "id", "list":
 		opts.args = flag.Args()[1:]
 		if len(opts.args) > 0 {
@@ -93,7 +102,7 @@ func parseArgs() (*options, error) {
 			return nil, fmt.Errorf("start-all takes no arguments")
 		}
 	default:
-		return nil, fmt.Errorf("expected command")
+		return nil, fmt.Errorf("unknown command %q", opts.command)
 	}
 
 	return opts, nil

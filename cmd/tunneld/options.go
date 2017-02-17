@@ -10,10 +10,23 @@ const usage1 string = `Usage: tunneld [OPTIONS]
 options:
 `
 
+const usage2 string = `
+Example:
+	tuneld -clients YMBKT3V-ESUTZ2Z-7MRILIJ-T35FHGO-D2DHO7D-FXMGSSR-V4LBSZX-BNDONQ4
+	tuneld -httpAddr :8080 -httpsAddr "" -clients YMBKT3V-ESUTZ2Z-7MRILIJ-T35FHGO-D2DHO7D-FXMGSSR-V4LBSZX-BNDONQ4
+
+Author:
+	Written by M. Matczuk (mmatczuk@gmail.com)
+
+Bugs:
+	Submit bugs to https://github.com/mmatczuk/go-http-tunnel/issues
+`
+
 func init() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, usage1)
 		flag.PrintDefaults()
+		fmt.Fprintf(os.Stderr, usage2)
 	}
 }
 
