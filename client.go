@@ -116,7 +116,7 @@ func (c *Client) Start() error {
 
 		// detect disconnect hiccup
 		if err == nil && now.Sub(c.lastDisconnect).Seconds() < 5 {
-			err = fmt.Errorf("disconnect hiccup, connection is being cut")
+			err = fmt.Errorf("connection is being cut")
 		}
 
 		c.conn = nil
@@ -125,7 +125,7 @@ func (c *Client) Start() error {
 		c.connMu.Unlock()
 
 		if err != nil {
-			return fmt.Errorf("server error: %s", err)
+			return err
 		}
 	}
 }
@@ -268,7 +268,7 @@ func (c *Client) handleHandshakeError(w http.ResponseWriter, r *http.Request) {
 	)
 
 	c.connMu.Lock()
-	c.serverErr = err
+	c.serverErr = fmt.Errorf("server error: %s", err)
 	c.connMu.Unlock()
 }
 
