@@ -26,15 +26,15 @@ config.yaml:
 	server_addr: SERVER_IP:4443
 	insecure_skip_verify: true
 	tunnels:
-	  www:
+	  webui:
 	    proto: http
-	    addr: http://IP:8080/ui/
+	    addr: localhost:8080
 	    auth: user:password
-	    host: ui.mytunnel.com
+	    host: webui.my-tunnel-host.com
 	  ssh:
 	    proto: tcp
-	    addr: IP:22
-	    remote_addr: 0.0.0.0:2222
+	    addr: 192.168.0.5:22
+	    remote_addr: 0.0.0.0:22
 
 Author:
 	Written by M. Matczuk (mmatczuk@gmail.com)
@@ -63,7 +63,7 @@ type options struct {
 
 func parseArgs() (*options, error) {
 	debug := flag.Bool("debug", false, "Starts gops agent")
-	config := flag.String("config", "tunnel.yaml", "Path to tunnel configuration file")
+	config := flag.String("config", "tunnel.yml", "Path to tunnel configuration file")
 	logTo := flag.String("log", "stdout", "Write log messages to this file, file name or 'stdout', 'stderr', 'none'")
 	logLevel := flag.Int("log-level", 1, "Level of messages to log, 0-3")
 	version := flag.Bool("version", false, "Prints tunnel version")
