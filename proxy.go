@@ -14,6 +14,8 @@ type ProxyFunc func(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage)
 type ProxyFuncs struct {
 	// HTTP is custom implementation of HTTP proxing.
 	HTTP ProxyFunc
+	// WS is custom implementation of WS proxing.
+	WS ProxyFunc
 	// TCP is custom implementation of TCP proxing.
 	TCP ProxyFunc
 }
@@ -25,6 +27,8 @@ func Proxy(p ProxyFuncs) ProxyFunc {
 		switch msg.Protocol {
 		case proto.HTTP:
 			f = p.HTTP
+		case proto.WS:
+			f = p.WS
 		case proto.TCP, proto.TCP4, proto.TCP6, proto.UNIX:
 			f = p.TCP
 		}

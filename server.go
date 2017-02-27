@@ -14,10 +14,18 @@ import (
 
 	"golang.org/x/net/http2"
 
+	"github.com/gorilla/websocket"
 	"github.com/mmatczuk/go-http-tunnel/id"
 	"github.com/mmatczuk/go-http-tunnel/log"
 	"github.com/mmatczuk/go-http-tunnel/proto"
 )
+
+// DefaultUpgrader specifies parameters for upgrading an HTTP connection to a
+// WebSocket connection.
+var DefaultUpgrader = &websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+}
 
 // ServerConfig defines configuration for the Server.
 type ServerConfig struct {
@@ -29,6 +37,9 @@ type ServerConfig struct {
 	// Listener specifies optional listener for client connections. If nil
 	// tls.Listen("tcp", Addr, TLSConfig) is used.
 	Listener net.Listener
+	// Upgrader specifies optional parameters for upgrading an HTTP
+	// connection to a WebSocket connection.
+	Upgrader *websocket.Upgrader
 	// Logger is optional logger. If nil logging is disabled.
 	Logger log.Logger
 }
@@ -441,20 +452,88 @@ func (s *Server) listen(l net.Listener, identifier id.ID) {
 	}
 }
 
-// ServeHTTP proxies http connection to the client.
+// ServeHTTP proxies HTTP connection to the client.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	resp, err := s.RoundTrip(r)
-	if err == errUnauthorised {
-		w.Header().Set("WWW-Authenticate", "Basic realm=\"User Visible Realm\"")
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+	identifier, auth, ok := s.Subscriber(r.Host)
+	if !ok {
+		s.logger.Log(
+			"level", 2,
+			"msg", errClientNotSubscribed,
+			"addr", r.RemoteAddr,
+			"url", r.URL,
+		)
+
+		http.Error(w, errClientNotSubscribed.Error(), http.StatusUnauthorized)
 		return
 	}
+
+	if auth != nil {
+		user, password, ok := r.BasicAuth()
+		if !ok || auth.User != user || auth.Password != password {
+			s.logger.Log(
+				"level", 2,
+				"msg", "unauthorised",
+				"addr", r.RemoteAddr,
+				"url", r.URL,
+				"user", user,
+			)
+
+			w.Header().Set("WWW-Authenticate", "Basic realm=\"User Visible Realm\"")
+			http.Error(w, "unauthorised", http.StatusUnauthorized)
+			return
+		}
+		r.Header.Del("Authorization")
+	}
+
+	if isWebSocketConn(r) {
+		s.handleWS(identifier, w, r)
+	} else {
+		s.handleHTTP(identifier, w, r)
+	}
+}
+
+func (s *Server) handleWS(identifier id.ID, w http.ResponseWriter, r *http.Request) {
+	msg := &proto.ControlMessage{
+		Action:       proto.ActionProxy,
+		Protocol:     proto.WS,
+		ForwardedFor: r.RemoteAddr,
+		ForwardedBy:  r.Host,
+		Path:         r.URL.Path,
+	}
+
+	err := s.proxyWS(identifier, w, r, msg)
 	if err != nil {
 		s.logger.Log(
 			"level", 0,
-			"action", "round trip failed",
-			"addr", r.RemoteAddr,
-			"url", r.URL,
+			"msg", "proxy error",
+			"identifier", identifier,
+			"ctrlMsg", msg,
+			"req", r,
+			"err", err,
+		)
+
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+}
+
+func (s *Server) handleHTTP(identifier id.ID, w http.ResponseWriter, r *http.Request) {
+	msg := &proto.ControlMessage{
+		Action:       proto.ActionProxy,
+		Protocol:     proto.HTTP,
+		ForwardedFor: r.RemoteAddr,
+		ForwardedBy:  r.Host,
+		Path:         r.URL.Path,
+	}
+
+	resp, err := s.proxyHTTP(identifier, r, msg)
+	if err != nil {
+		s.logger.Log(
+			"level", 0,
+			"msg", "proxy error",
+			"identifier", identifier,
+			"ctrlMsg", msg,
+			"req", r,
 			"err", err,
 		)
 
@@ -473,28 +552,143 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// RoundTrip is http.RoundTriper implementation.
-func (s *Server) RoundTrip(r *http.Request) (*http.Response, error) {
-	msg := &proto.ControlMessage{
-		Action:       proto.ActionProxy,
-		Protocol:     proto.HTTP,
-		ForwardedFor: r.RemoteAddr,
-		ForwardedBy:  r.Host,
+func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMessage) error {
+	s.logger.Log(
+		"level", 2,
+		"action", "proxy",
+		"identifier", identifier,
+		"ctrlMsg", msg,
+	)
+
+	defer conn.Close()
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+	defer pw.Close()
+
+	req, err := s.proxyRequest(identifier, msg, pr)
+	if err != nil {
+		return err
 	}
 
-	identifier, auth, ok := s.Subscriber(r.Host)
-	if !ok {
-		return nil, errClientNotSubscribed
+	done := make(chan struct{})
+	go func() {
+		transfer(pw, conn, log.NewContext(s.logger).With(
+			"dir", "user to client",
+			"dst", identifier,
+			"src", conn.RemoteAddr(),
+		))
+		close(done)
+	}()
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("io error: %s", err)
 	}
-	if auth != nil {
-		user, password, _ := r.BasicAuth()
-		if auth.User != user || auth.Password != password {
-			return nil, errUnauthorised
+
+	transfer(conn, resp.Body, log.NewContext(s.logger).With(
+		"dir", "client to user",
+		"dst", conn.RemoteAddr(),
+		"src", identifier,
+	))
+
+	<-done
+
+	s.logger.Log(
+		"level", 2,
+		"action", "proxy done",
+		"identifier", identifier,
+		"ctrlMsg", msg,
+	)
+
+	return nil
+}
+
+func (s *Server) proxyWS(identifier id.ID, w http.ResponseWriter, r *http.Request, msg *proto.ControlMessage) error {
+	s.logger.Log(
+		"level", 2,
+		"action", "proxy",
+		"identifier", identifier,
+		"ctrlMsg", msg,
+	)
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+	defer pw.Close()
+
+	req, err := s.proxyRequest(identifier, msg, pr)
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		err := r.Write(pw)
+		if err != nil {
+			s.logger.Log(
+				"level", 0,
+				"msg", "proxy error",
+				"identifier", identifier,
+				"ctrlMsg", msg,
+				"err", err,
+			)
 		}
-		r.Header.Del("Authorization")
+	}()
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("io error: %s", err)
+	}
+	// TODO check status
+
+	upgrader := s.config.Upgrader
+	if upgrader == nil {
+		upgrader = DefaultUpgrader
 	}
 
-	return s.proxyHTTP(identifier, r, msg)
+	// Only pass those headers to the upgrader.
+	upgradeHeader := http.Header{}
+	if hdr := resp.Header.Get("Sec-Websocket-Protocol"); hdr != "" {
+		upgradeHeader.Set("Sec-Websocket-Protocol", hdr)
+	}
+	if hdr := resp.Header.Get("Set-Cookie"); hdr != "" {
+		upgradeHeader.Set("Set-Cookie", hdr)
+	}
+
+	// Now upgrade the existing incoming request to a WebSocket connection.
+	// Also pass the header that we gathered from the Dial handshake.
+	ws, err := upgrader.Upgrade(w, r, upgradeHeader)
+	if err != nil {
+		return fmt.Errorf("upgrade error: %s", err)
+	}
+	defer ws.Close()
+
+	done := make(chan struct{})
+	go func() {
+		transfer(pw, ws.UnderlyingConn(), log.NewContext(s.logger).With(
+			"dir", "user to client",
+			"dst", identifier,
+			"src", r.RemoteAddr,
+		))
+		close(done)
+	}()
+
+	transfer(ws.UnderlyingConn(), resp.Body, log.NewContext(s.logger).With(
+		"dir", "client to user",
+		"dst", r.RemoteAddr,
+		"src", identifier,
+	))
+
+	<-done
+
+	s.logger.Log(
+		"level", 2,
+		"action", "proxy done",
+		"identifier", identifier,
+		"ctrlMsg", msg,
+		"status code", resp.StatusCode,
+	)
+
+	return nil
 }
 
 func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMessage) error {
@@ -563,7 +757,7 @@ func (s *Server) proxyHTTP(identifier id.ID, r *http.Request, msg *proto.Control
 
 	req, err := s.connectRequest(identifier, msg, pr)
 	if err != nil {
-		return nil, fmt.Errorf("proxy request error: %s", err)
+		return nil, err
 	}
 
 	go func() {
