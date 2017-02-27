@@ -7,12 +7,24 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"strings"
+
+	"golang.org/x/net/websocket"
 )
 
 // EchoHTTP starts serving HTTP requests on listener l, it accepts connections,
 // reads request body and writes is back in response.
 func EchoHTTP(l net.Listener) {
+	wsServer := &websocket.Server{Handler: func(ws *websocket.Conn) {
+		io.Copy(ws, ws)
+	}}
+
 	http.Serve(l, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isWebSocketConn(r) {
+			wsServer.ServeHTTP(w, r)
+			return
+		}
+
 		w.WriteHeader(http.StatusOK)
 		if r.Body != nil {
 			body, err := ioutil.ReadAll(r.Body)
@@ -22,6 +34,23 @@ func EchoHTTP(l net.Listener) {
 			w.Write(body)
 		}
 	}))
+}
+
+func isWebSocketConn(r *http.Request) bool {
+	return r.Method == "GET" && headerContains(r.Header["Connection"], "upgrade") &&
+		headerContains(r.Header["Upgrade"], "websocket")
+}
+
+func headerContains(header []string, value string) bool {
+	for _, h := range header {
+		for _, v := range strings.Split(h, ",") {
+			if strings.EqualFold(strings.TrimSpace(v), value) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // EchoTCP accepts connections and copies back received bytes.

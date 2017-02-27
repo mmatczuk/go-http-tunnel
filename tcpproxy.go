@@ -62,10 +62,6 @@ func NewMultiTCPProxy(localAddrMap map[string]string, logger log.Logger) *TCPPro
 func (p *TCPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage) {
 	w = flushWriter{w}
 
-	if msg.Protocol != "tcp" {
-		panic(fmt.Sprintf("Expected proxy protocol, got %s", msg.Protocol))
-	}
-
 	target := p.localAddrFor(msg.ForwardedBy)
 	if target == "" {
 		p.logger.Log(
@@ -95,10 +91,12 @@ func (p *TCPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage
 		))
 		close(done)
 	}()
+
 	transfer(local, r, log.NewContext(p.logger).With(
 		"dst", target,
 		"src", msg.ForwardedBy,
 	))
+
 	<-done
 }
 

@@ -30,6 +30,7 @@ const (
 	TCP4 = "tcp4"
 	TCP6 = "tcp6"
 	UNIX = "unix"
+	WS   = "ws"
 )
 
 // ControlMessage is sent from server to client to establish tunneled
@@ -39,9 +40,10 @@ type ControlMessage struct {
 	Protocol     string
 	ForwardedFor string
 	ForwardedBy  string
+	Path         string
 }
 
-var xffRegexp = regexp.MustCompile("(for|proto|by)=([^;$]+)")
+var xffRegexp = regexp.MustCompile("(proto|for|by|path)=([^;$]+)")
 
 // ParseControlMessage creates new ControlMessage based on "Forwarded" http
 // header.
@@ -55,12 +57,14 @@ func ParseControlMessage(h http.Header) (*ControlMessage, error) {
 
 	for _, i := range xffRegexp.FindAllStringSubmatch(v, -1) {
 		switch i[1] {
+		case "proto":
+			msg.Protocol = i[2]
 		case "for":
 			msg.ForwardedFor = i[2]
 		case "by":
 			msg.ForwardedBy = i[2]
-		case "proto":
-			msg.Protocol = i[2]
+		case "path":
+			msg.Path = i[2]
 		}
 	}
 
@@ -72,6 +76,6 @@ func ParseControlMessage(h http.Header) (*ControlMessage, error) {
 //
 // See Forwarded header specification https://tools.ietf.org/html/rfc7239.
 func (c *ControlMessage) Update(h http.Header) {
-	v := fmt.Sprintf("for=%s; proto=%s; by=%s", c.ForwardedFor, c.Protocol, c.ForwardedBy)
+	v := fmt.Sprintf("proto=%s; for=%s; by=%s; path=%s", c.Protocol, c.ForwardedFor, c.ForwardedBy, c.Path)
 	h.Set(ForwardedHeader, v)
 }

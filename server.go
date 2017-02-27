@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"golang.org/x/net/http2"
+	"golang.org/x/net/websocket"
 
 	"github.com/mmatczuk/go-http-tunnel/id"
 	"github.com/mmatczuk/go-http-tunnel/log"
@@ -38,6 +39,7 @@ type Server struct {
 	*registry
 	config     *ServerConfig
 	listener   net.Listener
+	wsServer   *websocket.Server
 	connPool   *connPool
 	httpClient *http.Client
 	logger     log.Logger
@@ -60,6 +62,10 @@ func NewServer(config *ServerConfig) (*Server, error) {
 		config:   config,
 		listener: listener,
 		logger:   logger,
+	}
+
+	s.wsServer = &websocket.Server{
+		Handler: s.ServeWS,
 	}
 
 	t := &http2.Transport{}
@@ -487,8 +493,14 @@ func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMe
 	<-done
 }
 
-// ServeHTTP proxies http connection to the client.
+// ServeHTTP proxies HTTP connection to the client.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// handle websockets
+	if isWebSocketConn(r) {
+		s.wsServer.ServeHTTP(w, r)
+		return
+	}
+
 	resp, err := s.RoundTrip(r)
 	if err == errUnauthorised {
 		w.Header().Set("WWW-Authenticate", "Basic realm=\"User Visible Realm\"")
@@ -526,6 +538,7 @@ func (s *Server) RoundTrip(r *http.Request) (*http.Response, error) {
 		Protocol:     proto.HTTP,
 		ForwardedFor: r.RemoteAddr,
 		ForwardedBy:  r.Host,
+		Path:         r.URL.Path,
 	}
 
 	identifier, auth, ok := s.Subscriber(r.Host)
@@ -602,6 +615,47 @@ func (s *Server) proxyHTTP(identifier id.ID, r *http.Request, msg *proto.Control
 	)
 
 	return resp, nil
+}
+
+// ServeWS is WebSocket handler.
+func (s *Server) ServeWS(ws *websocket.Conn) {
+	r := ws.Request()
+
+	var err error
+
+	identifier, auth, ok := s.Subscriber(r.Host)
+	if !ok {
+		err = errClientNotSubscribed
+	}
+	if auth != nil {
+		user, password, _ := r.BasicAuth()
+		if auth.User != user || auth.Password != password {
+			err = errUnauthorised
+		}
+		r.Header.Del("Authorization")
+	}
+
+	if err != nil {
+		s.logger.Log(
+			"level", 0,
+			"action", "round trip failed",
+			"addr", r.RemoteAddr,
+			"url", r.URL,
+			"err", err,
+		)
+		ws.WriteClose(http.StatusBadGateway)
+		return
+	}
+
+	msg := &proto.ControlMessage{
+		Action:       proto.Proxy,
+		Protocol:     proto.WS,
+		ForwardedFor: r.RemoteAddr,
+		ForwardedBy:  r.Host,
+		Path:         r.URL.Path,
+	}
+
+	s.proxyConn(identifier, ws, msg)
 }
 
 func (s *Server) proxyRequest(identifier id.ID, msg *proto.ControlMessage, r io.Reader) (*http.Request, error) {

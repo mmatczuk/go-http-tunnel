@@ -13,6 +13,7 @@ func TestControlMessage_WriteParse(t *testing.T) {
 		Protocol:     "tcp",
 		ForwardedFor: "127.0.0.1:58104",
 		ForwardedBy:  "127.0.0.1:7777",
+		Path:         "/some/path",
 	}
 
 	var h = http.Header{}

@@ -3,6 +3,7 @@ package tunnel
 import (
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/mmatczuk/go-http-tunnel/log"
 )
@@ -40,6 +41,23 @@ func transfer(dst io.Writer, src io.ReadCloser, logger log.Logger) {
 		"action", "transferred",
 		"bytes", n,
 	)
+}
+
+func isWebSocketConn(r *http.Request) bool {
+	return r.Method == "GET" && headerContains(r.Header["Connection"], "upgrade") &&
+		headerContains(r.Header["Upgrade"], "websocket")
+}
+
+func headerContains(header []string, value string) bool {
+	for _, h := range header {
+		for _, v := range strings.Split(h, ",") {
+			if strings.EqualFold(strings.TrimSpace(v), value) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func copyHeader(dst, src http.Header) {
