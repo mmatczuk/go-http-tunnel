@@ -54,7 +54,7 @@ func NewHTTPProxy(localURL *url.URL, logger log.Logger) *HTTPProxy {
 // NewMultiHTTPProxy creates a new dispatching HTTPProxy, requests may go to
 // different backends based on localURLMap.
 func NewMultiHTTPProxy(localURLMap map[string]*url.URL, logger log.Logger) *HTTPProxy {
-	if localURLMap == nil || len(localURLMap) == 0 {
+	if localURLMap == nil {
 		panic("Empty localURLMap")
 	}
 

@@ -44,7 +44,7 @@ func NewTCPProxy(localAddr string, logger log.Logger) *TCPProxy {
 // NewMultiTCPProxy creates a new dispatching TCPProxy, connections may go to
 // different backends based on localAddrMap.
 func NewMultiTCPProxy(localAddrMap map[string]string, logger log.Logger) *TCPProxy {
-	if localAddrMap == nil || len(localAddrMap) == 0 {
+	if localAddrMap == nil {
 		panic("Empty localAddrMap")
 	}
 
