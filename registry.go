@@ -102,9 +102,6 @@ func (r *registry) Unsubscribe(identifier id.ID) *RegistryItem {
 	if !ok {
 		return nil
 	}
-	if i == voidRegistryItem {
-		return nil
-	}
 
 	if i.Hosts != nil {
 		for _, h := range i.Hosts {
