@@ -90,7 +90,7 @@ func (p *HTTPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessag
 	req, err := http.ReadRequest(bufio.NewReader(r))
 	if err != nil {
 		p.logger.Log(
-			"level", 1,
+			"level", 0,
 			"msg", "failed to read request",
 			"ctrlMsg", msg,
 			"err", err,
