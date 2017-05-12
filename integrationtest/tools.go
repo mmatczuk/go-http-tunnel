@@ -45,7 +45,7 @@ func RandBytes(n int) []byte {
 		panic(err)
 	}
 	if read != n {
-		panic("Read did not fill whole slice")
+		panic("read did not fill whole slice")
 	}
 	return b
 }
