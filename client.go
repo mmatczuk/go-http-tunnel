@@ -59,16 +59,16 @@ type Client struct {
 // must invoke Start() on returned instance in order to connect server.
 func NewClient(config *ClientConfig) *Client {
 	if config.ServerAddr == "" {
-		panic("Missing ServerAddr")
+		panic("missing ServerAddr")
 	}
 	if config.TLSClientConfig == nil {
-		panic("Missing TLSClientConfig")
+		panic("missing TLSClientConfig")
 	}
 	if config.Tunnels == nil || len(config.Tunnels) == 0 {
-		panic("Missing Tunnels")
+		panic("missing Tunnels")
 	}
 	if config.Proxy == nil {
-		panic("Missing Proxy")
+		panic("missing Proxy")
 	}
 
 	logger := config.Logger

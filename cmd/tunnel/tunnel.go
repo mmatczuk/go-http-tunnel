@@ -92,7 +92,7 @@ func main() {
 
 	b, err := yaml.Marshal(config)
 	if err != nil {
-		panic(err)
+		fatal("failed to load config: %s", err)
 	}
 	logger.Log("config", string(b))
 
@@ -151,7 +151,7 @@ func proxy(m map[string]*TunnelConfig, logger log.Logger) tunnel.ProxyFunc {
 		case proto.HTTP:
 			u, err := url.Parse(t.Addr)
 			if err != nil {
-				panic(err)
+				fatal("invalid tunnel address: %s", err)
 			}
 			httpURL[t.Host] = u
 		case proto.TCP, proto.TCP4, proto.TCP6:

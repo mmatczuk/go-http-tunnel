@@ -28,7 +28,7 @@ type TCPProxy struct {
 // localAddr.
 func NewTCPProxy(localAddr string, logger log.Logger) *TCPProxy {
 	if localAddr == "" {
-		panic("Empty localAddr")
+		panic("missing localAddr")
 	}
 
 	if logger == nil {
@@ -45,7 +45,7 @@ func NewTCPProxy(localAddr string, logger log.Logger) *TCPProxy {
 // different backends based on localAddrMap.
 func NewMultiTCPProxy(localAddrMap map[string]string, logger log.Logger) *TCPProxy {
 	if localAddrMap == nil {
-		panic("Empty localAddrMap")
+		panic("missing localAddrMap")
 	}
 
 	if logger == nil {
@@ -60,10 +60,16 @@ func NewMultiTCPProxy(localAddrMap map[string]string, logger log.Logger) *TCPPro
 
 // Proxy is a ProxyFunc.
 func (p *TCPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage) {
-	w = flushWriter{w}
-
-	if msg.Protocol != "tcp" {
-		panic(fmt.Sprintf("Expected proxy protocol, got %s", msg.Protocol))
+	switch msg.Protocol {
+	case proto.TCP, proto.TCP4, proto.TCP6:
+		// ok
+	default:
+		p.logger.Log(
+			"level", 0,
+			"msg", "unsupported protocol",
+			"ctrlMsg", msg,
+		)
+		return
 	}
 
 	target := p.localAddrFor(msg.ForwardedBy)
@@ -71,7 +77,7 @@ func (p *TCPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage
 		p.logger.Log(
 			"level", 1,
 			"msg", "no target",
-			"host", msg.ForwardedBy,
+			"ctrlMsg", msg,
 		)
 		return
 	}
@@ -82,6 +88,7 @@ func (p *TCPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage
 			"level", 0,
 			"msg", "dial failed",
 			"target", target,
+			"ctrlMsg", msg,
 			"err", err,
 		)
 		return
@@ -89,7 +96,7 @@ func (p *TCPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage
 
 	done := make(chan struct{})
 	go func() {
-		transfer(w, local, log.NewContext(p.logger).With(
+		transfer(flushWriter{w}, local, log.NewContext(p.logger).With(
 			"dst", msg.ForwardedBy,
 			"src", target,
 		))

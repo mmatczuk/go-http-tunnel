@@ -35,7 +35,7 @@ type HTTPProxy struct {
 // localURL.
 func NewHTTPProxy(localURL *url.URL, logger log.Logger) *HTTPProxy {
 	if localURL == nil {
-		panic("Empty localURL")
+		panic("empty localURL")
 	}
 
 	if logger == nil {
@@ -55,7 +55,7 @@ func NewHTTPProxy(localURL *url.URL, logger log.Logger) *HTTPProxy {
 // different backends based on localURLMap.
 func NewMultiHTTPProxy(localURLMap map[string]*url.URL, logger log.Logger) *HTTPProxy {
 	if localURLMap == nil {
-		panic("Empty localURLMap")
+		panic("empty localURLMap")
 	}
 
 	if logger == nil {
@@ -74,7 +74,12 @@ func NewMultiHTTPProxy(localURLMap map[string]*url.URL, logger log.Logger) *HTTP
 // Proxy is a ProxyFunc.
 func (p *HTTPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage) {
 	if msg.Protocol != proto.HTTP {
-		panic(fmt.Sprintf("Expected proxy protocol, got %s", msg.Protocol))
+		p.logger.Log(
+			"level", 0,
+			"msg", "unsupported protocol",
+			"ctrlMsg", msg,
+		)
+		return
 	}
 
 	rw, ok := w.(http.ResponseWriter)
@@ -87,6 +92,7 @@ func (p *HTTPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessag
 		p.logger.Log(
 			"level", 1,
 			"msg", "failed to read request",
+			"ctrlMsg", msg,
 			"err", err,
 		)
 		return

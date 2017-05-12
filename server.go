@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -47,7 +48,7 @@ type Server struct {
 func NewServer(config *ServerConfig) (*Server, error) {
 	listener, err := listener(config)
 	if err != nil {
-		return nil, fmt.Errorf("tls listener failedAuthorization: %s", err)
+		return nil, fmt.Errorf("tls listener failed: %s", err)
 	}
 
 	logger := config.Logger
@@ -77,10 +78,10 @@ func listener(config *ServerConfig) (net.Listener, error) {
 	}
 
 	if config.Addr == "" {
-		panic("Missing Addr")
+		return nil, errors.New("missing Addr")
 	}
 	if config.TLSConfig == nil {
-		panic("Missing TLSConfig")
+		return nil, errors.New("missing TLSConfig")
 	}
 
 	return tls.Listen("tcp", config.Addr, config.TLSConfig)
@@ -442,7 +443,7 @@ func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMe
 	defer pr.Close()
 	defer pw.Close()
 
-	req, err := s.proxyRequest(identifier, msg, pr)
+	req, err := s.connectRequest(identifier, msg, pr)
 	if err != nil {
 		s.logger.Log(
 			"level", 0,
@@ -555,7 +556,7 @@ func (s *Server) proxyHTTP(identifier id.ID, r *http.Request, msg *proto.Control
 	defer pr.Close()
 	defer pw.Close()
 
-	req, err := s.proxyRequest(identifier, msg, pr)
+	req, err := s.connectRequest(identifier, msg, pr)
 	if err != nil {
 		return nil, fmt.Errorf("proxy request error: %s", err)
 	}
@@ -604,11 +605,10 @@ func (s *Server) proxyHTTP(identifier id.ID, r *http.Request, msg *proto.Control
 	return resp, nil
 }
 
-func (s *Server) proxyRequest(identifier id.ID, msg *proto.ControlMessage, r io.Reader) (*http.Request, error) {
-	if msg.Action != proto.ActionProxy {
-		panic("Invalid action")
-	}
-
+// connectRequest creates HTTP request to client with a given identifier having
+// control message and data input stream, output data stream results from
+// response the created request.
+func (s *Server) connectRequest(identifier id.ID, msg *proto.ControlMessage, r io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(http.MethodPut, s.connPool.URL(identifier), r)
 	if err != nil {
 		return nil, fmt.Errorf("could not create request: %s", err)
