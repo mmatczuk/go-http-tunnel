@@ -102,10 +102,12 @@ func (p *TCPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage
 		))
 		close(done)
 	}()
+
 	transfer(local, r, log.NewContext(p.logger).With(
 		"dst", target,
 		"src", msg.ForwardedBy,
 	))
+
 	<-done
 }
 
