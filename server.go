@@ -427,65 +427,18 @@ func (s *Server) listen(l net.Listener, identifier id.ID) {
 			ForwardedFor: conn.RemoteAddr().String(),
 			ForwardedBy:  l.Addr().String(),
 		}
-		go s.proxyConn(identifier, conn, msg)
+		go func() {
+			if err := s.proxyConn(identifier, conn, msg); err != nil {
+				s.logger.Log(
+					"level", 0,
+					"msg", "proxy error",
+					"identifier", identifier,
+					"ctrlMsg", msg,
+					"err", err,
+				)
+			}
+		}()
 	}
-}
-
-func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMessage) {
-	s.logger.Log(
-		"level", 2,
-		"action", "proxy",
-		"identifier", identifier,
-		"ctrlMsg", msg,
-	)
-
-	pr, pw := io.Pipe()
-	defer pr.Close()
-	defer pw.Close()
-
-	req, err := s.connectRequest(identifier, msg, pr)
-	if err != nil {
-		s.logger.Log(
-			"level", 0,
-			"msg", "proxy error",
-			"identifier", identifier,
-			"ctrlMsg", msg,
-			"err", err,
-		)
-		conn.Close()
-		return
-	}
-
-	done := make(chan struct{})
-	go func() {
-		transfer(pw, conn, log.NewContext(s.logger).With(
-			"dir", "user to client",
-			"dst", identifier,
-			"src", conn.RemoteAddr(),
-		))
-		close(done)
-	}()
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		s.logger.Log(
-			"level", 0,
-			"msg", "proxy error",
-			"identifier", identifier,
-			"ctrlMsg", msg,
-			"err", err,
-		)
-		conn.Close()
-		return
-	}
-
-	transfer(conn, resp.Body, log.NewContext(s.logger).With(
-		"dir", "client to user",
-		"dst", conn.RemoteAddr(),
-		"src", identifier,
-	))
-
-	<-done
 }
 
 // ServeHTTP proxies http connection to the client.
@@ -544,6 +497,58 @@ func (s *Server) RoundTrip(r *http.Request) (*http.Response, error) {
 	return s.proxyHTTP(identifier, r, msg)
 }
 
+func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMessage) error {
+	s.logger.Log(
+		"level", 2,
+		"action", "proxy",
+		"identifier", identifier,
+		"ctrlMsg", msg,
+	)
+
+	defer conn.Close()
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+	defer pw.Close()
+
+	req, err := s.connectRequest(identifier, msg, pr)
+	if err != nil {
+		return err
+	}
+
+	done := make(chan struct{})
+	go func() {
+		transfer(pw, conn, log.NewContext(s.logger).With(
+			"dir", "user to client",
+			"dst", identifier,
+			"src", conn.RemoteAddr(),
+		))
+		close(done)
+	}()
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("io error: %s", err)
+	}
+
+	transfer(conn, resp.Body, log.NewContext(s.logger).With(
+		"dir", "client to user",
+		"dst", conn.RemoteAddr(),
+		"src", identifier,
+	))
+
+	<-done
+
+	s.logger.Log(
+		"level", 2,
+		"action", "proxy done",
+		"identifier", identifier,
+		"ctrlMsg", msg,
+	)
+
+	return nil
+}
+
 func (s *Server) proxyHTTP(identifier id.ID, r *http.Request, msg *proto.ControlMessage) (*http.Response, error) {
 	s.logger.Log(
 		"level", 2,
@@ -591,7 +596,7 @@ func (s *Server) proxyHTTP(identifier id.ID, r *http.Request, msg *proto.Control
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("proxy error: %s", err)
+		return nil, fmt.Errorf("io error: %s", err)
 	}
 
 	s.logger.Log(
