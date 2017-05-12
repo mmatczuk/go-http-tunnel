@@ -1,77 +1,83 @@
 package proto
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
-	"regexp"
 )
 
-// Action represents type of ControlMessage.
-type Action int
-
-// ControlMessage actions.
+// Protocol HTTP headers.
 const (
-	Proxy Action = iota
+	HeaderAction       = "T-Action"
+	HeaderError        = "T-Error"
+	HeaderForwardedBy  = "T-Forwarded-By"
+	HeaderForwardedFor = "T-Forwarded-For"
+	HeaderPath         = "T-Path"
+	HeaderProtocol     = "T-Proto"
 )
 
-// ControlMessage headers
+// Known actions.
 const (
-	ErrorHeader     = "Error"
-	ForwardedHeader = "Forwarded"
+	ActionProxy string = "proxy"
 )
 
-// Known networks are "tcp", "tcp4" (IPv4-only), "tcp6" (IPv6-only), "udp",
-// "udp4" (IPv4-only), "udp6" (IPv6-only), "ip", "ip4" (IPv4-only),
-// "ip6" (IPv6-only), "unix", "unixgram" and "unixpacket".
+// Known protocol types.
 const (
 	HTTP = "http"
 	TCP  = "tcp"
 	TCP4 = "tcp4"
 	TCP6 = "tcp6"
 	UNIX = "unix"
+	WS   = "ws"
 )
 
-// ControlMessage is sent from server to client to establish tunneled
-// connection.
+// ControlMessage is sent from server to client before streaming data. It's
+// used to inform client about the data and action to take. Based on that client
+// routes requests to backend services.
 type ControlMessage struct {
-	Action       Action
+	Action       string
 	Protocol     string
 	ForwardedFor string
 	ForwardedBy  string
+	Path         string
 }
 
-var xffRegexp = regexp.MustCompile("(for|proto|by)=([^;$]+)")
-
-// ParseControlMessage creates new ControlMessage based on "Forwarded" http
-// header.
-func ParseControlMessage(h http.Header) (*ControlMessage, error) {
-	v := h.Get(ForwardedHeader)
-	if v == "" {
-		return nil, errors.New("missing Forwarded header")
+// ReadControlMessage reads ControlMessage from HTTP headers.
+func ReadControlMessage(h http.Header) (*ControlMessage, error) {
+	msg := ControlMessage{
+		Action:       h.Get(HeaderAction),
+		Protocol:     h.Get(HeaderProtocol),
+		ForwardedFor: h.Get(HeaderForwardedFor),
+		ForwardedBy:  h.Get(HeaderForwardedBy),
+		Path:         h.Get(HeaderPath),
 	}
 
-	var msg = &ControlMessage{}
+	var missing []string
 
-	for _, i := range xffRegexp.FindAllStringSubmatch(v, -1) {
-		switch i[1] {
-		case "for":
-			msg.ForwardedFor = i[2]
-		case "by":
-			msg.ForwardedBy = i[2]
-		case "proto":
-			msg.Protocol = i[2]
-		}
+	if msg.Action == "" {
+		missing = append(missing, HeaderAction)
+	}
+	if msg.Protocol == "" {
+		missing = append(missing, HeaderProtocol)
+	}
+	if msg.ForwardedFor == "" {
+		missing = append(missing, HeaderForwardedFor)
+	}
+	if msg.ForwardedBy == "" {
+		missing = append(missing, HeaderForwardedBy)
 	}
 
-	return msg, nil
+	if len(missing) != 0 {
+		return nil, fmt.Errorf("missing headers: %s", missing)
+	}
+
+	return &msg, nil
 }
 
-// Update writes ControlMessage to "Forwarded" http header, "by" and "for"
-// parameters take form of full IP and port.
-//
-// See Forwarded header specification https://tools.ietf.org/html/rfc7239.
+// Update writes ControlMessage to HTTP header.
 func (c *ControlMessage) Update(h http.Header) {
-	v := fmt.Sprintf("for=%s; proto=%s; by=%s", c.ForwardedFor, c.Protocol, c.ForwardedBy)
-	h.Set(ForwardedHeader, v)
+	h.Set(HeaderAction, string(c.Action))
+	h.Set(HeaderProtocol, c.Protocol)
+	h.Set(HeaderForwardedFor, c.ForwardedFor)
+	h.Set(HeaderForwardedBy, c.ForwardedBy)
+	h.Set(HeaderPath, c.Path)
 }

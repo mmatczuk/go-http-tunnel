@@ -216,7 +216,7 @@ func (c *Client) dial() (net.Conn, error) {
 
 func (c *Client) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodConnect {
-		if r.Header.Get(proto.ErrorHeader) != "" {
+		if r.Header.Get(proto.HeaderError) != "" {
 			c.handleHandshakeError(w, r)
 		} else {
 			c.handleHandshake(w, r)
@@ -224,7 +224,7 @@ func (c *Client) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	msg, err := proto.ParseControlMessage(r.Header)
+	msg, err := proto.ReadControlMessage(r.Header)
 	if err != nil {
 		c.logger.Log(
 			"level", 1,
@@ -240,7 +240,7 @@ func (c *Client) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		"ctrlMsg", msg,
 	)
 	switch msg.Action {
-	case proto.Proxy:
+	case proto.ActionProxy:
 		c.config.Proxy(w, r.Body, msg)
 	default:
 		c.logger.Log(
@@ -258,7 +258,7 @@ func (c *Client) serveHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *Client) handleHandshakeError(w http.ResponseWriter, r *http.Request) {
-	err := fmt.Errorf(r.Header.Get(proto.ErrorHeader))
+	err := fmt.Errorf(r.Header.Get(proto.HeaderError))
 
 	c.logger.Log(
 		"level", 1,

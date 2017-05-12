@@ -325,7 +325,7 @@ func (s *Server) notifyError(serverError error, identifier id.ID) {
 		return
 	}
 
-	req.Header.Set(proto.ErrorHeader, serverError.Error())
+	req.Header.Set(proto.HeaderError, serverError.Error())
 
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
 	defer cancel()
@@ -421,7 +421,7 @@ func (s *Server) listen(l net.Listener, identifier id.ID) {
 		}
 
 		msg := &proto.ControlMessage{
-			Action:       proto.Proxy,
+			Action:       proto.ActionProxy,
 			Protocol:     l.Addr().Network(),
 			ForwardedFor: conn.RemoteAddr().String(),
 			ForwardedBy:  l.Addr().String(),
@@ -522,7 +522,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // RoundTrip is http.RoundTriper implementation.
 func (s *Server) RoundTrip(r *http.Request) (*http.Response, error) {
 	msg := &proto.ControlMessage{
-		Action:       proto.Proxy,
+		Action:       proto.ActionProxy,
 		Protocol:     proto.HTTP,
 		ForwardedFor: r.RemoteAddr,
 		ForwardedBy:  r.Host,
@@ -605,7 +605,7 @@ func (s *Server) proxyHTTP(identifier id.ID, r *http.Request, msg *proto.Control
 }
 
 func (s *Server) proxyRequest(identifier id.ID, msg *proto.ControlMessage, r io.Reader) (*http.Request, error) {
-	if msg.Action != proto.Proxy {
+	if msg.Action != proto.ActionProxy {
 		panic("Invalid action")
 	}
 
