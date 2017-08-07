@@ -1,22 +1,15 @@
 language: go
-sudo: false
-
 go:
-  - tip
-
-matrix:
-    fast_finish: true
+  - 1.8
+  - 1.7
 
 addons:
   apt:
     packages:
     - moreutils
 
-before_install:
-  - make devtools
-
 install:
-  - go get -d ./...
+  - make get-deps
 
 script:
-  - make check
+  - make

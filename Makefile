@@ -2,33 +2,29 @@ OUTPUT_DIR = build
 OS = "darwin freebsd linux windows"
 ARCH = "amd64 arm"
 OSARCH = "!darwin/arm !windows/arm"
-
 GIT_COMMIT = $(shell git describe --always)
 
-all: check
+all: check test
 
 .PHONY: check
 check:
 	gofmt -s -l . | ifne false
 	go vet ./...
 	golint ./...
-	go build ./...
-	go test -race ./...
+	misspell ./...
+	ineffassign .
+
+.PHONY: test
+test:
+	go test -cover -race ./...
+
+.PHONY: release
+release: check test clean build package
 
 .PHONY: clean
 clean:
 	go clean ./...
 	rm -rf ${OUTPUT_DIR}
-
-.PHONY: devtools
-devtools:
-	go get -u github.com/golang/lint/golint
-	go get -u github.com/golang/mock/gomock
-	go get -u github.com/mitchellh/gox
-	go get -u github.com/tcnksm/ghr
-
-.PHONY: release
-release: clean check build package publish
 
 .PHONY: build
 build:
@@ -46,3 +42,16 @@ package:
 .PHONY: publish
 publish:
 	ghr -recreate -u mmatczuk -t ${GITHUB_TOKEN} -r go-http-tunnel pre-release ${OUTPUT_DIR}/dist
+
+.PHONY: get-deps
+get-deps:
+	go get -t ./...
+
+	go get -u github.com/golang/lint/golint
+	go get -u github.com/golang/mock/gomock
+	go get -u github.com/client9/misspell/cmd/misspell
+	go get -u github.com/gordonklaus/ineffassign
+
+	go get -u github.com/mitchellh/gox
+	go get -u github.com/tcnksm/ghr
+
