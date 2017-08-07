@@ -1,4 +1,4 @@
-package integrationtest
+package tunnel_test
 
 import (
 	"crypto/tls"
