@@ -566,7 +566,7 @@ func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMe
 	defer pr.Close()
 	defer pw.Close()
 
-	req, err := s.proxyRequest(identifier, msg, pr)
+	req, err := s.connectRequest(identifier, msg, pr)
 	if err != nil {
 		return err
 	}
@@ -616,23 +616,10 @@ func (s *Server) proxyWS(identifier id.ID, w http.ResponseWriter, r *http.Reques
 	defer pr.Close()
 	defer pw.Close()
 
-	req, err := s.proxyRequest(identifier, msg, pr)
+	req, err := s.connectRequest(identifier, msg, pr)
 	if err != nil {
 		return err
 	}
-
-	go func() {
-		err := r.Write(pw)
-		if err != nil {
-			s.logger.Log(
-				"level", 0,
-				"msg", "proxy error",
-				"identifier", identifier,
-				"ctrlMsg", msg,
-				"err", err,
-			)
-		}
-	}()
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
@@ -686,58 +673,6 @@ func (s *Server) proxyWS(identifier id.ID, w http.ResponseWriter, r *http.Reques
 		"identifier", identifier,
 		"ctrlMsg", msg,
 		"status code", resp.StatusCode,
-	)
-
-	return nil
-}
-
-func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMessage) error {
-	s.logger.Log(
-		"level", 2,
-		"action", "proxy",
-		"identifier", identifier,
-		"ctrlMsg", msg,
-	)
-
-	defer conn.Close()
-
-	pr, pw := io.Pipe()
-	defer pr.Close()
-	defer pw.Close()
-
-	req, err := s.connectRequest(identifier, msg, pr)
-	if err != nil {
-		return err
-	}
-
-	done := make(chan struct{})
-	go func() {
-		transfer(pw, conn, log.NewContext(s.logger).With(
-			"dir", "user to client",
-			"dst", identifier,
-			"src", conn.RemoteAddr(),
-		))
-		close(done)
-	}()
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("io error: %s", err)
-	}
-
-	transfer(conn, resp.Body, log.NewContext(s.logger).With(
-		"dir", "client to user",
-		"dst", conn.RemoteAddr(),
-		"src", identifier,
-	))
-
-	<-done
-
-	s.logger.Log(
-		"level", 2,
-		"action", "proxy done",
-		"identifier", identifier,
-		"ctrlMsg", msg,
 	)
 
 	return nil
