@@ -16,7 +16,6 @@ import (
 
 	"github.com/cenkalti/backoff"
 	"github.com/mmatczuk/go-http-tunnel"
-	"github.com/mmatczuk/go-http-tunnel/cmd/cmd"
 	"github.com/mmatczuk/go-http-tunnel/id"
 	"github.com/mmatczuk/go-http-tunnel/log"
 	"github.com/mmatczuk/go-http-tunnel/proto"
@@ -33,7 +32,7 @@ func main() {
 		return
 	}
 
-	logger, err := cmd.NewLogger(opts.logTo, opts.logLevel)
+	logger, err := log.NewLogger(opts.logTo, opts.logLevel)
 	if err != nil {
 		fatal("failed to init logger: %s", err)
 	}
