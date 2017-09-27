@@ -1,7 +1,6 @@
 language: go
 go:
-  - 1.8
-  - 1.7
+  - 1.9
 
 addons:
   apt:
@@ -9,6 +8,7 @@ addons:
     - moreutils
 
 install:
+  - make get-tools
   - make get-deps
 
 script:

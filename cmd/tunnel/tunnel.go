@@ -11,7 +11,6 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/cenkalti/backoff"
-	"github.com/google/gops/agent"
 	"github.com/mmatczuk/go-http-tunnel"
 	"github.com/mmatczuk/go-http-tunnel/cmd/cmd"
 	"github.com/mmatczuk/go-http-tunnel/id"
@@ -28,12 +27,6 @@ func main() {
 	if opts.version {
 		fmt.Println(version)
 		return
-	}
-
-	if opts.debug {
-		if err := agent.Listen(nil); err != nil {
-			fatal("gops agent failed to start: %s", err)
-		}
 	}
 
 	logger, err := cmd.NewLogger(opts.logTo, opts.logLevel)
@@ -74,7 +67,7 @@ func main() {
 
 		return
 	case "start":
-		tunnels := make(map[string]*TunnelConfig)
+		tunnels := make(map[string]*tunnelConfig)
 		for _, arg := range opts.args {
 			t, ok := config.Tunnels[arg]
 			if !ok {
@@ -110,14 +103,14 @@ func main() {
 	}
 }
 
-func tlsConfig(cert tls.Certificate, config *Config) *tls.Config {
+func tlsConfig(cert tls.Certificate, config *config) *tls.Config {
 	return &tls.Config{
 		Certificates:       []tls.Certificate{cert},
 		InsecureSkipVerify: config.InsecureSkipVerify,
 	}
 }
 
-func expBackoff(config *BackoffConfig) *backoff.ExponentialBackOff {
+func expBackoff(config *backoffConfig) *backoff.ExponentialBackOff {
 	b := backoff.NewExponentialBackOff()
 	b.InitialInterval = config.InitialInterval
 	b.Multiplier = config.Multiplier
@@ -127,7 +120,7 @@ func expBackoff(config *BackoffConfig) *backoff.ExponentialBackOff {
 	return b
 }
 
-func tunnels(m map[string]*TunnelConfig) map[string]*proto.Tunnel {
+func tunnels(m map[string]*tunnelConfig) map[string]*proto.Tunnel {
 	p := make(map[string]*proto.Tunnel)
 
 	for name, t := range m {
@@ -142,7 +135,7 @@ func tunnels(m map[string]*TunnelConfig) map[string]*proto.Tunnel {
 	return p
 }
 
-func proxy(m map[string]*TunnelConfig, logger log.Logger) tunnel.ProxyFunc {
+func proxy(m map[string]*tunnelConfig, logger log.Logger) tunnel.ProxyFunc {
 	httpURL := make(map[string]*url.URL)
 	tcpAddr := make(map[string]string)
 

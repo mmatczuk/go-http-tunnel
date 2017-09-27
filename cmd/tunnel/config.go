@@ -11,14 +11,14 @@ import (
 	"github.com/mmatczuk/go-http-tunnel/proto"
 )
 
-type BackoffConfig struct {
+type backoffConfig struct {
 	InitialInterval time.Duration `yaml:"interval,omitempty"`
 	Multiplier      float64       `yaml:"multiplier,omitempty"`
 	MaxInterval     time.Duration `yaml:"max_interval,omitempty"`
 	MaxElapsedTime  time.Duration `yaml:"max_time,omitempty"`
 }
 
-type TunnelConfig struct {
+type tunnelConfig struct {
 	Protocol   string `yaml:"proto,omitempty"`
 	Addr       string `yaml:"addr,omitempty"`
 	Auth       string `yaml:"auth,omitempty"`
@@ -26,30 +26,30 @@ type TunnelConfig struct {
 	RemoteAddr string `yaml:"remote_addr,omitempty"`
 }
 
-type Config struct {
+type config struct {
 	ServerAddr         string                   `yaml:"server_addr,omitempty"`
 	InsecureSkipVerify bool                     `yaml:"insecure_skip_verify,omitempty"`
 	TLSCrt             string                   `yaml:"tls_crt,omitempty"`
 	TLSKey             string                   `yaml:"tls_key,omitempty"`
-	Backoff            *BackoffConfig           `yaml:"backoff,omitempty"`
-	Tunnels            map[string]*TunnelConfig `yaml:"tunnels,omitempty"`
+	Backoff            *backoffConfig           `yaml:"backoff,omitempty"`
+	Tunnels            map[string]*tunnelConfig `yaml:"tunnels,omitempty"`
 }
 
-var defaultBackoffConfig = BackoffConfig{
+var defaultBackoffConfig = backoffConfig{
 	InitialInterval: 500 * time.Millisecond,
 	Multiplier:      1.5,
 	MaxInterval:     60 * time.Second,
 	MaxElapsedTime:  15 * time.Minute,
 }
 
-func loadConfiguration(path string) (*Config, error) {
+func loadConfiguration(path string) (*config, error) {
 	configBuf, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file %q: %s", path, err)
 	}
 
 	// deserialize/parse the config
-	var config Config
+	var config config
 	if err = yaml.Unmarshal(configBuf, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse file %q: %s", path, err)
 	}
@@ -106,7 +106,7 @@ func loadConfiguration(path string) (*Config, error) {
 	return &config, nil
 }
 
-func validateHTTP(t *TunnelConfig) error {
+func validateHTTP(t *tunnelConfig) error {
 	var err error
 	if t.Host == "" {
 		return fmt.Errorf("host: missing")
@@ -127,7 +127,7 @@ func validateHTTP(t *TunnelConfig) error {
 	return nil
 }
 
-func validateTCP(t *TunnelConfig) error {
+func validateTCP(t *tunnelConfig) error {
 	var err error
 	if t.RemoteAddr, err = normalizeAddress(t.RemoteAddr); err != nil {
 		return fmt.Errorf("remote_addr: %s", err)

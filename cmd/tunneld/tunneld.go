@@ -9,7 +9,6 @@ import (
 
 	"golang.org/x/net/http2"
 
-	"github.com/google/gops/agent"
 	"github.com/mmatczuk/go-http-tunnel"
 	"github.com/mmatczuk/go-http-tunnel/cmd/cmd"
 	"github.com/mmatczuk/go-http-tunnel/id"
@@ -21,12 +20,6 @@ func main() {
 	if opts.version {
 		fmt.Println(version)
 		return
-	}
-
-	if opts.debug {
-		if err := agent.Listen(nil); err != nil {
-			fatal("gops agent failed to start: %s", err)
-		}
 	}
 
 	logger, err := cmd.NewLogger(opts.logTo, opts.logLevel)
