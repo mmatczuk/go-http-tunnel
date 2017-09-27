@@ -1,10 +1,11 @@
 ### Release
 build
 
-### GO
+### Go
 *.cov
 *.prof
 *.mprof
+vendor
 
 ### IntelliJ
 .idea/
