@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"github.com/mmatczuk/go-http-tunnel/mock"
+	"github.com/mmatczuk/go-http-tunnel/tunnelmock"
 )
 
 func TestContext_Log(t *testing.T) {
@@ -17,7 +17,7 @@ func TestContext_Log(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	b := mock.NewMockLogger(ctrl)
+	b := tunnelmock.NewMockLogger(ctrl)
 	b.EXPECT().Log("key", "val", "sufix", "")
 	NewContext(b).With("sufix", "").Log("key", "val")
 

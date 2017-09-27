@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"github.com/mmatczuk/go-http-tunnel/mock"
+	"github.com/mmatczuk/go-http-tunnel/tunnelmock"
 )
 
 func TestFilterLogger_Log(t *testing.T) {
@@ -17,7 +17,7 @@ func TestFilterLogger_Log(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	b := mock.NewMockLogger(ctrl)
+	b := tunnelmock.NewMockLogger(ctrl)
 	f := NewFilterLogger(b, 2)
 	b.EXPECT().Log("level", 0)
 	f.Log("level", 0)

@@ -19,7 +19,7 @@ check: .check-fmt .check-vet .check-lint .check-misspell .check-ineffassign
 .check-lint:
 	@golint `go list ./...` \
 	| grep -v /id/ \
-	| grep -v /mock/ \
+	| grep -v /tunnelmock/ \
 	| tee /dev/stderr | ifne false
 
 .PHONY: .check-misspell

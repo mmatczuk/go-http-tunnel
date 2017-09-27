@@ -301,7 +301,7 @@ func port(addr net.Addr) string {
 }
 
 func selfSignedCert() (tls.Certificate, id.ID) {
-	cert, err := tls.LoadX509KeyPair("./test-fixtures/selfsigned.crt", "./test-fixtures/selfsigned.key")
+	cert, err := tls.LoadX509KeyPair("./testdata/selfsigned.crt", "./testdata/selfsigned.key")
 	if err != nil {
 		panic(err)
 	}

@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/mmatczuk/go-http-tunnel/mock"
 	"github.com/mmatczuk/go-http-tunnel/proto"
+	"github.com/mmatczuk/go-http-tunnel/tunnelmock"
 )
 
 func TestClient_Dial(t *testing.T) {
@@ -48,7 +48,7 @@ func TestClient_DialBackoff(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	b := mock.NewMockBackoff(ctrl)
+	b := tunnelmock.NewMockBackoff(ctrl)
 	gomock.InOrder(
 		b.EXPECT().NextBackOff().Return(50*time.Millisecond).Times(2),
 		b.EXPECT().NextBackOff().Return(-time.Millisecond),
