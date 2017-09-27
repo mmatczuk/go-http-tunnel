@@ -124,4 +124,8 @@ See:
 
 ## License
 
-The BSD 3-Clause License
+Copyright (C) 2017 Michał Matczuk
+
+This project is distributed under the BSD-3 license. See the [LICENSE](https://github.com/mmatczuk/go-http-tunnel/blob/master/LICENSE) file for details.
+
+GitHub star is always appreciated!
