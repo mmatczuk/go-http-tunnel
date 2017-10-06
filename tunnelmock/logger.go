@@ -34,9 +34,7 @@ func (_m *MockLogger) EXPECT() *_MockLoggerRecorder {
 
 func (_m *MockLogger) Log(_param0 ...interface{}) error {
 	_s := []interface{}{}
-	for _, _x := range _param0 {
-		_s = append(_s, _x)
-	}
+	_s = append(_s, _param0...)
 	ret := _m.ctrl.Call(_m, "Log", _s...)
 	ret0, _ := ret[0].(error)
 	return ret0

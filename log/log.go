@@ -41,8 +41,7 @@ func NewLogger(to string, level int) (Logger, error) {
 
 	log.SetOutput(w)
 
-	var l Logger
-	l = NewStdLogger()
+	l := NewStdLogger()
 	l = NewFilterLogger(l, level)
 	return l, nil
 }

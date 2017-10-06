@@ -42,8 +42,7 @@ func (c *Context) WithPrefix(keyvals ...interface{}) *Context {
 
 // Log adds prefix and suffix to keyvals and calls internal logger.
 func (c *Context) Log(keyvals ...interface{}) error {
-	var s []interface{}
-	s = append(c.prefix, keyvals...)
+	s := append(c.prefix, keyvals...)
 	s = append(s, c.suffix...)
 	return c.logger.Log(s...)
 }

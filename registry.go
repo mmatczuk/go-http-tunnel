@@ -45,7 +45,7 @@ func newRegistry(logger log.Logger) *registry {
 
 	return &registry{
 		items:  make(map[id.ID]*RegistryItem),
-		hosts:  make(map[string]*hostInfo, 0),
+		hosts:  make(map[string]*hostInfo),
 		logger: logger,
 	}
 }
