@@ -232,8 +232,9 @@ func (s *Server) handleClient(conn net.Conn) {
 	{
 		ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
 		defer cancel()
-		req.WithContext(ctx)
+		req = req.WithContext(ctx)
 	}
+
 	resp, err = s.httpClient.Do(req)
 	if err != nil {
 		logger.Log(
@@ -334,9 +335,8 @@ func (s *Server) notifyError(serverError error, identifier id.ID) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
 	defer cancel()
-	req.WithContext(ctx)
 
-	s.httpClient.Do(req)
+	s.httpClient.Do(req.WithContext(ctx))
 }
 
 // addTunnels invokes addHost or addListener based on data from proto.Tunnel. If

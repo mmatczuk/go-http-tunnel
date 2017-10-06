@@ -5,7 +5,7 @@ clean:
 	@go clean -r
 
 .PHONY: check
-check: .check-fmt .check-vet .check-lint .check-misspell .check-ineffassign
+check: .check-fmt .check-vet .check-lint .check-ineffassign .check-mega .check-misspell
 
 .PHONY: .check-fmt
 .check-fmt:
@@ -22,13 +22,17 @@ check: .check-fmt .check-vet .check-lint .check-misspell .check-ineffassign
 	| grep -v /tunnelmock/ \
 	| tee /dev/stderr | ifne false
 
+.PHONY: .check-ineffassign
+.check-ineffassign:
+	@ineffassign ./
+
 .PHONY: .check-misspell
 .check-misspell:
 	@misspell ./...
 
-.PHONY: .check-ineffassign
-.check-ineffassign:
-	@ineffassign ./
+.PHONY: .check-mega
+.check-mega:
+	@megacheck ./...
 
 .PHONY: test
 test:
@@ -51,6 +55,7 @@ get-tools:
 	@go get -u github.com/gordonklaus/ineffassign
 	@go get -u github.com/mitchellh/gox
 	@go get -u github.com/tcnksm/ghr
+	@go get -u honnef.co/go/tools/cmd/megacheck
 
 #OUTPUT_DIR = build
 #OS = "darwin freebsd linux windows"
