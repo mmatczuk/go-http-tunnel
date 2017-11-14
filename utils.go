@@ -7,36 +7,21 @@ package tunnel
 import (
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/mmatczuk/go-http-tunnel/log"
 )
 
-type closeWriter interface {
-	CloseWrite() error
-}
-
-type closeReader interface {
-	CloseRead() error
-}
-
 func transfer(dst io.Writer, src io.ReadCloser, logger log.Logger) {
 	n, err := io.Copy(dst, src)
 	if err != nil {
-		logger.Log(
-			"level", 2,
-			"msg", "copy error",
-			"err", err,
-		)
-	}
-
-	if d, ok := dst.(closeWriter); ok {
-		d.CloseWrite()
-	}
-
-	if s, ok := src.(closeReader); ok {
-		s.CloseRead()
-	} else {
-		src.Close()
+		if !strings.Contains(err.Error(), "context canceled") && !strings.Contains(err.Error(), "CANCEL") {
+			logger.Log(
+				"level", 2,
+				"msg", "copy error",
+				"err", err,
+			)
+		}
 	}
 
 	logger.Log(

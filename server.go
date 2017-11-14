@@ -465,16 +465,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
+	defer resp.Body.Close()
 
 	copyHeader(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
-	if resp.Body != nil {
-		transfer(w, resp.Body, log.NewContext(s.logger).With(
-			"dir", "client to user",
-			"dst", r.RemoteAddr,
-			"src", r.Host,
-		))
-	}
+
+	transfer(w, resp.Body, log.NewContext(s.logger).With(
+		"dir", "client to user",
+		"dst", r.RemoteAddr,
+		"src", r.Host,
+	))
 }
 
 // RoundTrip is http.RoundTriper implementation.
@@ -504,7 +504,7 @@ func (s *Server) RoundTrip(r *http.Request) (*http.Response, error) {
 func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMessage) error {
 	s.logger.Log(
 		"level", 2,
-		"action", "proxy",
+		"action", "proxy conn",
 		"identifier", identifier,
 		"ctrlMsg", msg,
 	)
@@ -520,6 +520,9 @@ func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMe
 		return err
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	req = req.WithContext(ctx)
+
 	done := make(chan struct{})
 	go func() {
 		transfer(pw, conn, log.NewContext(s.logger).With(
@@ -527,6 +530,7 @@ func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMe
 			"dst", identifier,
 			"src", conn.RemoteAddr(),
 		))
+		cancel()
 		close(done)
 	}()
 
@@ -534,6 +538,7 @@ func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMe
 	if err != nil {
 		return fmt.Errorf("io error: %s", err)
 	}
+	defer resp.Body.Close()
 
 	transfer(conn, resp.Body, log.NewContext(s.logger).With(
 		"dir", "client to user",
@@ -545,7 +550,7 @@ func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMe
 
 	s.logger.Log(
 		"level", 2,
-		"action", "proxy done",
+		"action", "proxy conn done",
 		"identifier", identifier,
 		"ctrlMsg", msg,
 	)
@@ -556,7 +561,7 @@ func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMe
 func (s *Server) proxyHTTP(identifier id.ID, r *http.Request, msg *proto.ControlMessage) (*http.Response, error) {
 	s.logger.Log(
 		"level", 2,
-		"action", "proxy",
+		"action", "proxy HTTP",
 		"identifier", identifier,
 		"ctrlMsg", msg,
 	)
@@ -605,7 +610,7 @@ func (s *Server) proxyHTTP(identifier id.ID, r *http.Request, msg *proto.Control
 
 	s.logger.Log(
 		"level", 2,
-		"action", "proxy done",
+		"action", "proxy HTTP done",
 		"identifier", identifier,
 		"ctrlMsg", msg,
 		"status code", resp.StatusCode,
