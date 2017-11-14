@@ -97,6 +97,7 @@ func (p *TCPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage
 		)
 		return
 	}
+	defer local.Close()
 
 	done := make(chan struct{})
 	go func() {
