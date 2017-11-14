@@ -22,6 +22,7 @@ import (
 
 	"github.com/mmatczuk/go-http-tunnel"
 	"github.com/mmatczuk/go-http-tunnel/id"
+	"github.com/mmatczuk/go-http-tunnel/log"
 	"github.com/mmatczuk/go-http-tunnel/proto"
 )
 
@@ -83,6 +84,7 @@ func makeTunnelServer(t *testing.T) *tunnel.Server {
 	s, err := tunnel.NewServer(&tunnel.ServerConfig{
 		Addr:      ":0",
 		TLSConfig: tlsConfig(cert),
+		Logger:    log.NewStdLogger(),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -99,11 +101,11 @@ func makeTunnelClient(t *testing.T, serverAddr string, httpLocalAddr, httpAddr, 
 			Scheme: "http",
 			Host:   "127.0.0.1:" + port(httpAddr),
 		},
-	}, nil)
+	}, log.NewStdLogger())
 
 	tcpProxy := tunnel.NewMultiTCPProxy(map[string]string{
 		port(tcpLocalAddr): tcpAddr.String(),
-	}, nil)
+	}, log.NewStdLogger())
 
 	tunnels := map[string]*proto.Tunnel{
 		proto.HTTP: {
@@ -126,6 +128,7 @@ func makeTunnelClient(t *testing.T, serverAddr string, httpLocalAddr, httpAddr, 
 			HTTP: httpProxy.Proxy,
 			TCP:  tcpProxy.Proxy,
 		}),
+		Logger: log.NewStdLogger(),
 	})
 	go c.Start()
 
@@ -202,9 +205,6 @@ func testHTTP(t *testing.T, addr net.Addr, payload []byte, repeat uint) {
 		}
 		if resp.StatusCode != http.StatusOK {
 			t.Error("Unexpected status code", resp)
-		}
-		if resp.Body == nil {
-			t.Error("No body")
 		}
 		b, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
