@@ -12,7 +12,7 @@ import (
 	"github.com/mmatczuk/go-http-tunnel/log"
 )
 
-func transfer(dst io.Writer, src io.ReadCloser, logger log.Logger) {
+func transfer(dst io.Writer, src io.Reader, logger log.Logger) {
 	n, err := io.Copy(dst, src)
 	if err != nil {
 		if !strings.Contains(err.Error(), "context canceled") && !strings.Contains(err.Error(), "CANCEL") {
