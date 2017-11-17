@@ -38,14 +38,14 @@ func main() {
 	}
 
 	// read configuration file
-	config, err := loadConfiguration(opts.config)
+	c, err := loadClientConfigFromFile(opts.config)
 	if err != nil {
 		fatal("configuration error: %s", err)
 	}
 
 	switch opts.command {
 	case "id":
-		cert, err := tls.LoadX509KeyPair(config.TLSCrt, config.TLSKey)
+		cert, err := tls.LoadX509KeyPair(c.TLSCrt, c.TLSKey)
 		if err != nil {
 			fatal("failed to load key pair: %s", err)
 		}
@@ -58,7 +58,7 @@ func main() {
 		return
 	case "list":
 		var names []string
-		for n := range config.Tunnels {
+		for n := range c.Tunnels {
 			names = append(names, n)
 		}
 
@@ -70,34 +70,34 @@ func main() {
 
 		return
 	case "start":
-		tunnels := make(map[string]*tunnelConfig)
+		tunnels := make(map[string]*Tunnel)
 		for _, arg := range opts.args {
-			t, ok := config.Tunnels[arg]
+			t, ok := c.Tunnels[arg]
 			if !ok {
 				fatal("no such tunnel %q", arg)
 			}
 			tunnels[arg] = t
 		}
-		config.Tunnels = tunnels
+		c.Tunnels = tunnels
 	}
 
-	cert, err := tls.LoadX509KeyPair(config.TLSCrt, config.TLSKey)
+	cert, err := tls.LoadX509KeyPair(c.TLSCrt, c.TLSKey)
 	if err != nil {
 		fatal("failed to load certificate: %s", err)
 	}
 
-	b, err := yaml.Marshal(config)
+	b, err := yaml.Marshal(c)
 	if err != nil {
-		fatal("failed to load config: %s", err)
+		fatal("failed to load c: %s", err)
 	}
-	logger.Log("config", string(b))
+	logger.Log("c", string(b))
 
 	client := tunnel.NewClient(&tunnel.ClientConfig{
-		ServerAddr:      config.ServerAddr,
-		TLSClientConfig: tlsConfig(cert, config),
-		Backoff:         expBackoff(config.Backoff),
-		Tunnels:         tunnels(config.Tunnels),
-		Proxy:           proxy(config.Tunnels, logger),
+		ServerAddr:      c.ServerAddr,
+		TLSClientConfig: tlsConfig(cert, c),
+		Backoff:         expBackoff(c.Backoff),
+		Tunnels:         tunnels(c.Tunnels),
+		Proxy:           proxy(c.Tunnels, logger),
 		Logger:          logger,
 	})
 
@@ -106,24 +106,24 @@ func main() {
 	}
 }
 
-func tlsConfig(cert tls.Certificate, config *config) *tls.Config {
+func tlsConfig(cert tls.Certificate, c *ClientConfig) *tls.Config {
 	return &tls.Config{
 		Certificates:       []tls.Certificate{cert},
-		InsecureSkipVerify: config.InsecureSkipVerify,
+		InsecureSkipVerify: c.InsecureSkipVerify,
 	}
 }
 
-func expBackoff(config *backoffConfig) *backoff.ExponentialBackOff {
+func expBackoff(c BackoffConfig) *backoff.ExponentialBackOff {
 	b := backoff.NewExponentialBackOff()
-	b.InitialInterval = config.InitialInterval
-	b.Multiplier = config.Multiplier
-	b.MaxInterval = config.MaxInterval
-	b.MaxElapsedTime = config.MaxElapsedTime
+	b.InitialInterval = c.Interval
+	b.Multiplier = c.Multiplier
+	b.MaxInterval = c.MaxInterval
+	b.MaxElapsedTime = c.MaxTime
 
 	return b
 }
 
-func tunnels(m map[string]*tunnelConfig) map[string]*proto.Tunnel {
+func tunnels(m map[string]*Tunnel) map[string]*proto.Tunnel {
 	p := make(map[string]*proto.Tunnel)
 
 	for name, t := range m {
@@ -138,7 +138,7 @@ func tunnels(m map[string]*tunnelConfig) map[string]*proto.Tunnel {
 	return p
 }
 
-func proxy(m map[string]*tunnelConfig, logger log.Logger) tunnel.ProxyFunc {
+func proxy(m map[string]*Tunnel, logger log.Logger) tunnel.ProxyFunc {
 	httpURL := make(map[string]*url.URL)
 	tcpAddr := make(map[string]string)
 

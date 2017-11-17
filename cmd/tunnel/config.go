@@ -15,14 +15,24 @@ import (
 	"github.com/mmatczuk/go-http-tunnel/proto"
 )
 
-type backoffConfig struct {
-	InitialInterval time.Duration `yaml:"interval,omitempty"`
-	Multiplier      float64       `yaml:"multiplier,omitempty"`
-	MaxInterval     time.Duration `yaml:"max_interval,omitempty"`
-	MaxElapsedTime  time.Duration `yaml:"max_time,omitempty"`
+// Default backoff configuration.
+const (
+	DefaultBackoffInterval    = 500 * time.Millisecond
+	DefaultBackoffMultiplier  = 1.5
+	DefaultBackoffMaxInterval = 60 * time.Second
+	DefaultBackoffMaxTime     = 15 * time.Minute
+)
+
+// BackoffConfig defines behavior of staggering reconnection retries.
+type BackoffConfig struct {
+	Interval    time.Duration `yaml:"interval"`
+	Multiplier  float64       `yaml:"multiplier"`
+	MaxInterval time.Duration `yaml:"max_interval"`
+	MaxTime     time.Duration `yaml:"max_time"`
 }
 
-type tunnelConfig struct {
+// Tunnel defines a tunnel.
+type Tunnel struct {
 	Protocol   string `yaml:"proto,omitempty"`
 	Addr       string `yaml:"addr,omitempty"`
 	Auth       string `yaml:"auth,omitempty"`
@@ -30,69 +40,45 @@ type tunnelConfig struct {
 	RemoteAddr string `yaml:"remote_addr,omitempty"`
 }
 
-type config struct {
-	ServerAddr         string                   `yaml:"server_addr,omitempty"`
-	InsecureSkipVerify bool                     `yaml:"insecure_skip_verify,omitempty"`
-	TLSCrt             string                   `yaml:"tls_crt,omitempty"`
-	TLSKey             string                   `yaml:"tls_key,omitempty"`
-	Backoff            *backoffConfig           `yaml:"backoff,omitempty"`
-	Tunnels            map[string]*tunnelConfig `yaml:"tunnels,omitempty"`
+// ClientConfig is a tunnel client configuration.
+type ClientConfig struct {
+	ServerAddr         string             `yaml:"server_addr"`
+	InsecureSkipVerify bool               `yaml:"insecure_skip_verify"`
+	TLSCrt             string             `yaml:"tls_crt"`
+	TLSKey             string             `yaml:"tls_key"`
+	Backoff            BackoffConfig      `yaml:"backoff"`
+	Tunnels            map[string]*Tunnel `yaml:"tunnels"`
 }
 
-var defaultBackoffConfig = backoffConfig{
-	InitialInterval: 500 * time.Millisecond,
-	Multiplier:      1.5,
-	MaxInterval:     60 * time.Second,
-	MaxElapsedTime:  15 * time.Minute,
-}
-
-func loadConfiguration(path string) (*config, error) {
-	configBuf, err := ioutil.ReadFile(path)
+func loadClientConfigFromFile(file string) (*ClientConfig, error) {
+	buf, err := ioutil.ReadFile(file)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read file %q: %s", path, err)
+		return nil, fmt.Errorf("failed to read file %q: %s", file, err)
 	}
 
-	// deserialize/parse the config
-	var config config
-	if err = yaml.Unmarshal(configBuf, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse file %q: %s", path, err)
+	c := ClientConfig{
+		TLSCrt: filepath.Join(filepath.Dir(file), "client.crt"),
+		TLSKey: filepath.Join(filepath.Dir(file), "client.key"),
+		Backoff: BackoffConfig{
+			Interval:    DefaultBackoffInterval,
+			Multiplier:  DefaultBackoffMultiplier,
+			MaxInterval: DefaultBackoffMaxInterval,
+			MaxTime:     DefaultBackoffMaxTime,
+		},
 	}
 
-	// set default values
-	if config.TLSCrt == "" {
-		config.TLSCrt = filepath.Join(filepath.Dir(path), "client.crt")
-	}
-	if config.TLSKey == "" {
-		config.TLSKey = filepath.Join(filepath.Dir(path), "client.key")
+	if err = yaml.Unmarshal(buf, &c); err != nil {
+		return nil, fmt.Errorf("failed to parse file %q: %s", file, err)
 	}
 
-	if config.Backoff == nil {
-		config.Backoff = &defaultBackoffConfig
-	} else {
-		if config.Backoff.InitialInterval == 0 {
-			config.Backoff.InitialInterval = defaultBackoffConfig.InitialInterval
-		}
-		if config.Backoff.Multiplier == 0 {
-			config.Backoff.Multiplier = defaultBackoffConfig.Multiplier
-		}
-		if config.Backoff.MaxInterval == 0 {
-			config.Backoff.MaxInterval = defaultBackoffConfig.MaxInterval
-		}
-		if config.Backoff.MaxElapsedTime == 0 {
-			config.Backoff.MaxElapsedTime = defaultBackoffConfig.MaxElapsedTime
-		}
-	}
-
-	// validate and normalize configuration
-	if config.ServerAddr == "" {
+	if c.ServerAddr == "" {
 		return nil, fmt.Errorf("server_addr: missing")
 	}
-
-	if config.ServerAddr, err = normalizeAddress(config.ServerAddr); err != nil {
+	if c.ServerAddr, err = normalizeAddress(c.ServerAddr); err != nil {
 		return nil, fmt.Errorf("server_addr: %s", err)
 	}
 
-	for name, t := range config.Tunnels {
+	for name, t := range c.Tunnels {
 		switch t.Protocol {
 		case proto.HTTP:
 			if err := validateHTTP(t); err != nil {
@@ -107,10 +93,10 @@ func loadConfiguration(path string) (*config, error) {
 		}
 	}
 
-	return &config, nil
+	return &c, nil
 }
 
-func validateHTTP(t *tunnelConfig) error {
+func validateHTTP(t *Tunnel) error {
 	var err error
 	if t.Host == "" {
 		return fmt.Errorf("host: missing")
@@ -131,7 +117,7 @@ func validateHTTP(t *tunnelConfig) error {
 	return nil
 }
 
-func validateTCP(t *tunnelConfig) error {
+func validateTCP(t *Tunnel) error {
 	var err error
 	if t.RemoteAddr, err = normalizeAddress(t.RemoteAddr); err != nil {
 		return fmt.Errorf("remote_addr: %s", err)
