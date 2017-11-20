@@ -59,8 +59,8 @@ get-tools:
 
 #OUTPUT_DIR = build
 #OS = "darwin freebsd linux windows"
-#ARCH = "amd64 arm"
-#OSARCH = "!darwin/arm !windows/arm"
+#ARCH = "386 amd64 arm"
+#OSARCH = "!darwin/386 !darwin/arm !windows/arm"
 #GIT_COMMIT = $(shell git describe --always)
 #
 #.PHONY: release
@@ -69,7 +69,7 @@ get-tools:
 #.PHONY: build
 #build:
 #	mkdir ${OUTPUT_DIR}
-#	GOARM=5 gox -ldflags "-X main.version=$(GIT_COMMIT)" \
+#	CGO_ENABLED=0 GOARM=5 gox -ldflags "-X main.version=$(GIT_COMMIT)" \
 #	-os=${OS} -arch=${ARCH} -osarch=${OSARCH} -output "${OUTPUT_DIR}/pkg/{{.OS}}_{{.Arch}}/{{.Dir}}" \
 #	./cmd/tunnel ./cmd/tunneld
 #
