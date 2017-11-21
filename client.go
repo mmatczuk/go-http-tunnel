@@ -19,11 +19,6 @@ import (
 	"github.com/mmatczuk/go-http-tunnel/proto"
 )
 
-var (
-	// DefaultTimeout specifies general purpose timeout.
-	DefaultTimeout = 10 * time.Second
-)
-
 // ClientConfig is configuration of the Client.
 type ClientConfig struct {
 	// ServerAddr specifies TCP address of the tunnel server.
@@ -169,13 +164,28 @@ func (c *Client) dial() (net.Conn, error) {
 		if c.config.DialTLS != nil {
 			conn, err = c.config.DialTLS(network, addr, tlsConfig)
 		} else {
-			conn, err = tls.DialWithDialer(
-				&net.Dialer{Timeout: DefaultTimeout},
-				network, addr, tlsConfig,
-			)
+			d := &net.Dialer{
+				Timeout: DefaultTimeout,
+			}
+			conn, err = d.Dial(network, addr)
+
+			if err == nil {
+				err = keepAlive(conn)
+			}
+			if err == nil {
+				conn = tls.Client(conn, tlsConfig)
+			}
+			if err == nil {
+				err = conn.(*tls.Conn).Handshake()
+			}
 		}
 
 		if err != nil {
+			if conn != nil {
+				conn.Close()
+				conn = nil
+			}
+
 			c.logger.Log(
 				"level", 0,
 				"msg", "dial failed",
