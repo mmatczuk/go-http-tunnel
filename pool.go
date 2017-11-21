@@ -5,6 +5,7 @@
 package tunnel
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -71,7 +72,19 @@ func (p *connPool) AddConn(conn net.Conn, identifier id.ID) error {
 	addr := p.addr(identifier)
 
 	if _, ok := p.conns[addr]; ok {
-		return errClientAlreadyConnected
+		// Check if the connection is alive by pinging it
+		ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
+		defer cancel()
+		if err := p.conns[addr].clientConn.Ping(ctx); err == nil || err == ctx.Err() {
+			// If the ping was successful or it timed out we refuse to open a new connection
+			return errClientAlreadyConnected
+		}
+		// If ping failed the connection is dead and we get rid of it
+		p.conns[addr].conn.Close()
+		delete(p.conns, addr)
+		if p.listener != nil {
+			p.listener(p.addrToIdentifier(addr))
+		}
 	}
 
 	c, err := p.t.NewClientConn(conn)

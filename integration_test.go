@@ -187,6 +187,14 @@ func TestIntegration(t *testing.T) {
 		}
 	}
 	wg.Wait()
+
+	c2 := makeTunnelClient(t, s.Addr(),
+		httpLocalAddr, http.Addr(),
+		tcpLocalAddr, tcp.Addr(),
+	)
+	time.Sleep(500 * time.Millisecond)
+	defer c2.Stop()
+
 }
 
 func testHTTP(t *testing.T, addr net.Addr, payload []byte, repeat uint) {
