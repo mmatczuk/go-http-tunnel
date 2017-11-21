@@ -28,7 +28,7 @@ Build the latest version.
 $ go get -u github.com/mmatczuk/go-http-tunnel/cmd/...
 ```
 
-Alternatively [download latest release](https://github.com/mmatczuk/go-http-tunnel/releases/latest). 
+Alternatively [download the latest release](https://github.com/mmatczuk/go-http-tunnel/releases/latest). 
 
 ## Running
 
