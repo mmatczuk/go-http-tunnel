@@ -52,7 +52,7 @@ type Server struct {
 func NewServer(config *ServerConfig) (*Server, error) {
 	listener, err := listener(config)
 	if err != nil {
-		return nil, fmt.Errorf("tls listener failed: %s", err)
+		return nil, fmt.Errorf("listener failed: %s", err)
 	}
 
 	logger := config.Logger
@@ -88,7 +88,7 @@ func listener(config *ServerConfig) (net.Listener, error) {
 		return nil, errors.New("missing TLSConfig")
 	}
 
-	return tls.Listen("tcp", config.Addr, config.TLSConfig)
+	return net.Listen("tcp", config.Addr)
 }
 
 // disconnected clears resources used by client, it's invoked by connection pool
@@ -147,7 +147,16 @@ func (s *Server) Start() {
 			continue
 		}
 
-		go s.handleClient(conn)
+		if err := keepAlive(conn); err != nil {
+			s.logger.Log(
+				"level", 1,
+				"msg", "connection keepAlive failed",
+				"addr", addr,
+				"err", err,
+			)
+		}
+
+		go s.handleClient(tls.Server(conn, s.config.TLSConfig))
 	}
 }
 
@@ -175,7 +184,7 @@ func (s *Server) handleClient(conn net.Conn) {
 		logger.Log(
 			"level", 0,
 			"msg", "invalid connection type",
-			"err", fmt.Errorf("expected tls conn, got %T", conn),
+			"err", fmt.Errorf("expected TLS conn, got %T", conn),
 		)
 		goto reject
 	}
