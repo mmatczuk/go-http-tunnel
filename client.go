@@ -22,6 +22,8 @@ import (
 var (
 	// DefaultTimeout specifies general purpose timeout.
 	DefaultTimeout = 10 * time.Second
+	// DefaultKeepAliveTimeout specifies the TCP keepalive timeout
+	DefaultKeepAliveTimeout = 60 * time.Second
 )
 
 // ClientConfig is configuration of the Client.
@@ -170,7 +172,7 @@ func (c *Client) dial() (net.Conn, error) {
 			conn, err = c.config.DialTLS(network, addr, tlsConfig)
 		} else {
 			conn, err = tls.DialWithDialer(
-				&net.Dialer{Timeout: DefaultTimeout},
+				&net.Dialer{Timeout: DefaultTimeout, KeepAlive: DefaultKeepAliveTimeout},
 				network, addr, tlsConfig,
 			)
 		}
