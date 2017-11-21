@@ -14,6 +14,12 @@
   version = "v1.1.0"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/felixge/tcpkeepalive"
+  packages = ["."]
+  revision = "5bb0b2dea91e0de550022159b9571aafc72c08ba"
+
+[[projects]]
   name = "github.com/golang/mock"
   packages = ["gomock"]
   revision = "13f360950a79f5864a972c786a10a50e44b69541"
@@ -40,6 +46,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "5f9ce2cfc77119828bda8371ed4da5c6a78ad469287571a166b9f412fecb73ae"
+  inputs-digest = "654fea302b8b5a71ce4f36f4097d0c0caa8150e46109cfbdd462adcd054a6768"
   solver-name = "gps-cdcl"
   solver-version = 1
