@@ -90,7 +90,7 @@ func main() {
 	if err != nil {
 		fatal("failed to load c: %s", err)
 	}
-	logger.Log("c", string(b))
+	logger.Log("config", string(b))
 
 	client := tunnel.NewClient(&tunnel.ClientConfig{
 		ServerAddr:      c.ServerAddr,
