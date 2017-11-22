@@ -150,7 +150,7 @@ func (s *Server) Start() {
 		if err := keepAlive(conn); err != nil {
 			s.logger.Log(
 				"level", 1,
-				"msg", "connection keepAlive failed",
+				"msg", "could not enable TCP keepalive for control connection",
 				"addr", addr,
 				"err", err,
 			)
@@ -406,6 +406,11 @@ rollback:
 func (s *Server) Unsubscribe(identifier id.ID) *RegistryItem {
 	s.connPool.DeleteConn(identifier)
 	return s.registry.Unsubscribe(identifier)
+}
+
+// Ping measures the RTT response time.
+func (s *Server) Ping(identifier id.ID) (time.Duration, error) {
+	return s.connPool.Ping(identifier)
 }
 
 func (s *Server) listen(l net.Listener, identifier id.ID) {
