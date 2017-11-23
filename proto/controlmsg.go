@@ -17,7 +17,6 @@ const (
 	HeaderProtocol     = "T-Proto"
 	HeaderForwardedFor = "T-Forwarded-For"
 	HeaderForwardedBy  = "T-Forwarded-By"
-	HeaderPath         = "T-Path"
 )
 
 // Known actions.
@@ -53,7 +52,6 @@ func ReadControlMessage(h http.Header) (*ControlMessage, error) {
 		Protocol:     h.Get(HeaderProtocol),
 		ForwardedFor: h.Get(HeaderForwardedFor),
 		ForwardedBy:  h.Get(HeaderForwardedBy),
-		Path:         h.Get(HeaderPath),
 	}
 
 	var missing []string
@@ -84,5 +82,4 @@ func (c *ControlMessage) Update(h http.Header) {
 	h.Set(HeaderProtocol, c.Protocol)
 	h.Set(HeaderForwardedFor, c.ForwardedFor)
 	h.Set(HeaderForwardedBy, c.ForwardedBy)
-	h.Set(HeaderPath, c.Path)
 }
