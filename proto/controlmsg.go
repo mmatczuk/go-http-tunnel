@@ -22,7 +22,7 @@ const (
 
 // Known actions.
 const (
-	ActionProxy string = "proxy"
+	ActionProxy = "proxy"
 )
 
 // Known protocol types.
