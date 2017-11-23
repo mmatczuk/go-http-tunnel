@@ -37,6 +37,16 @@ func transfer(dst io.Writer, src io.Reader, logger log.Logger) {
 	)
 }
 
+func cloneHeader(h http.Header) http.Header {
+	h2 := make(http.Header, len(h))
+	for k, vv := range h {
+		vv2 := make([]string, len(vv))
+		copy(vv2, vv)
+		h2[k] = vv2
+	}
+	return h2
+}
+
 func copyHeader(dst, src http.Header) {
 	for k, v := range src {
 		vv := make([]string, len(v))

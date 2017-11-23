@@ -493,6 +493,36 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // RoundTrip is http.RoundTriper implementation.
 func (s *Server) RoundTrip(r *http.Request) (*http.Response, error) {
+	identifier, auth, ok := s.Subscriber(r.Host)
+	if !ok {
+		return nil, errClientNotSubscribed
+	}
+
+	outr := r.WithContext(r.Context())
+	if r.ContentLength == 0 {
+		outr.Body = nil // Issue 16036: nil Body for http.Transport retries
+	}
+	outr.Header = cloneHeader(r.Header)
+
+	if auth != nil {
+		user, password, _ := r.BasicAuth()
+		if auth.User != user || auth.Password != password {
+			return nil, errUnauthorised
+		}
+		outr.Header.Del("Authorization")
+	}
+
+	clientIP, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil {
+		// If we aren't the first proxy retain prior
+		// X-Forwarded-For information as a comma+space
+		// separated list and fold multiple headers into one.
+		if prior, ok := r.Header["X-Forwarded-For"]; ok {
+			clientIP = strings.Join(prior, ", ") + ", " + clientIP
+		}
+		outr.Header.Set("X-Forwarded-For", clientIP)
+	}
+
 	scheme := r.URL.Scheme
 	if scheme == "" {
 		if r.TLS != nil {
@@ -503,24 +533,12 @@ func (s *Server) RoundTrip(r *http.Request) (*http.Response, error) {
 	}
 	msg := &proto.ControlMessage{
 		Action:         proto.ActionProxy,
-		ForwardedFor:   r.RemoteAddr,
+		ForwardedFor:   clientIP,
 		ForwardedHost:  r.Host,
 		ForwardedProto: scheme,
 	}
 
-	identifier, auth, ok := s.Subscriber(r.Host)
-	if !ok {
-		return nil, errClientNotSubscribed
-	}
-	if auth != nil {
-		user, password, _ := r.BasicAuth()
-		if auth.User != user || auth.Password != password {
-			return nil, errUnauthorised
-		}
-		r.Header.Del("Authorization")
-	}
-
-	return s.proxyHTTP(identifier, r, msg)
+	return s.proxyHTTP(identifier, outr, msg)
 }
 
 func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMessage) error {
