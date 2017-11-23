@@ -104,7 +104,15 @@ func (p *HTTPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessag
 		)
 		return
 	}
+
 	req.URL.Host = msg.ForwardedHost
+
+	if req.Header.Get("X-Forwarded-Host") == "" {
+		req.Header.Set("X-Forwarded-Host", msg.ForwardedHost)
+	}
+	if req.Header.Get("X-Forwarded-Proto") == "" {
+		req.Header.Set("X-Forwarded-Proto", msg.ForwardedProto)
+	}
 
 	p.ServeHTTP(rw, req)
 }
@@ -129,8 +137,8 @@ func (p *HTTPProxy) Director(req *http.Request) {
 		return
 	}
 
-	req.URL.Scheme = target.Scheme
 	req.URL.Host = target.Host
+	req.URL.Scheme = target.Scheme
 	req.URL.Path = singleJoiningSlash(target.Path, req.URL.Path)
 
 	targetQuery := target.RawQuery
