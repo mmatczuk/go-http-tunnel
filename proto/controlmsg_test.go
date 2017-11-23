@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-func TestControlMessage_WriteParse(t *testing.T) {
+func TestControlMessageWriteRead(t *testing.T) {
 	t.Parallel()
 
 	data := []struct {
@@ -63,7 +63,7 @@ func TestControlMessage_WriteParse(t *testing.T) {
 
 	for i, tt := range data {
 		h := http.Header{}
-		tt.msg.Update(h)
+		tt.msg.WriteToHeader(h)
 		actual, err := ReadControlMessage(h)
 		if tt.err != nil {
 			if err == nil {

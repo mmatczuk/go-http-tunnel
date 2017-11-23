@@ -76,8 +76,8 @@ func ReadControlMessage(h http.Header) (*ControlMessage, error) {
 	return &msg, nil
 }
 
-// Update writes ControlMessage to HTTP header.
-func (c *ControlMessage) Update(h http.Header) {
+// WriteToHeader writes ControlMessage to HTTP header.
+func (c *ControlMessage) WriteToHeader(h http.Header) {
 	h.Set(HeaderAction, string(c.Action))
 	h.Set(HeaderProtocol, c.Protocol)
 	h.Set(HeaderForwardedFor, c.ForwardedFor)

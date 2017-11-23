@@ -641,7 +641,7 @@ func (s *Server) connectRequest(identifier id.ID, msg *proto.ControlMessage, r i
 	if err != nil {
 		return nil, fmt.Errorf("could not create request: %s", err)
 	}
-	msg.Update(req.Header)
+	msg.WriteToHeader(req.Header)
 
 	return req, nil
 }
