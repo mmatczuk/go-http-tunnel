@@ -1,0 +1,8 @@
+server_addr: "185.2.2.137:4443"
+    insecure_skip_verify: true
+    tunnels:
+      webui:
+        proto: http
+        addr: "localhost:2020"
+        host: tunnel.khus.us
+
