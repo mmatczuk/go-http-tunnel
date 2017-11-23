@@ -5,7 +5,6 @@ build
 *.cov
 *.prof
 *.mprof
-vendor
 
 ### IntelliJ
 .idea/
