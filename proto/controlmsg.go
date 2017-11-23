@@ -13,10 +13,10 @@ import (
 const (
 	HeaderError = "X-Error"
 
-	HeaderAction        = "X-Action"
-	HeaderProtocol      = "X-Proto"
-	HeaderForwardedFor  = "X-Forwarded-For"
-	HeaderForwardedHost = "X-Forwarded-Host"
+	HeaderAction         = "X-Action"
+	HeaderForwardedFor   = "X-Forwarded-For"
+	HeaderForwardedHost  = "X-Forwarded-Host"
+	HeaderForwardedProto = "X-Forwarded-Proto"
 )
 
 // Known actions.
@@ -26,32 +26,32 @@ const (
 
 // Known protocol types.
 const (
-	HTTP = "http"
+	HTTP  = "http"
+	HTTPS = "https"
+
 	TCP  = "tcp"
 	TCP4 = "tcp4"
 	TCP6 = "tcp6"
 	UNIX = "unix"
-	WS   = "ws"
 )
 
 // ControlMessage is sent from server to client before streaming data. It's
 // used to inform client about the data and action to take. Based on that client
 // routes requests to backend services.
 type ControlMessage struct {
-	Action        string
-	Protocol      string
-	ForwardedFor  string
-	ForwardedHost string
-	Path          string
+	Action         string
+	ForwardedFor   string
+	ForwardedHost  string
+	ForwardedProto string
 }
 
 // ReadControlMessage reads ControlMessage from HTTP headers.
 func ReadControlMessage(h http.Header) (*ControlMessage, error) {
 	msg := ControlMessage{
-		Action:        h.Get(HeaderAction),
-		Protocol:      h.Get(HeaderProtocol),
-		ForwardedFor:  h.Get(HeaderForwardedFor),
-		ForwardedHost: h.Get(HeaderForwardedHost),
+		Action:         h.Get(HeaderAction),
+		ForwardedFor:   h.Get(HeaderForwardedFor),
+		ForwardedHost:  h.Get(HeaderForwardedHost),
+		ForwardedProto: h.Get(HeaderForwardedProto),
 	}
 
 	var missing []string
@@ -59,14 +59,14 @@ func ReadControlMessage(h http.Header) (*ControlMessage, error) {
 	if msg.Action == "" {
 		missing = append(missing, HeaderAction)
 	}
-	if msg.Protocol == "" {
-		missing = append(missing, HeaderProtocol)
-	}
 	if msg.ForwardedFor == "" {
 		missing = append(missing, HeaderForwardedFor)
 	}
 	if msg.ForwardedHost == "" {
 		missing = append(missing, HeaderForwardedHost)
+	}
+	if msg.ForwardedProto == "" {
+		missing = append(missing, HeaderForwardedProto)
 	}
 
 	if len(missing) != 0 {
@@ -79,7 +79,7 @@ func ReadControlMessage(h http.Header) (*ControlMessage, error) {
 // WriteToHeader writes ControlMessage to HTTP header.
 func (c *ControlMessage) WriteToHeader(h http.Header) {
 	h.Set(HeaderAction, string(c.Action))
-	h.Set(HeaderProtocol, c.Protocol)
 	h.Set(HeaderForwardedFor, c.ForwardedFor)
 	h.Set(HeaderForwardedHost, c.ForwardedHost)
+	h.Set(HeaderForwardedProto, c.ForwardedProto)
 }

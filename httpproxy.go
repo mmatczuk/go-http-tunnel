@@ -77,7 +77,10 @@ func NewMultiHTTPProxy(localURLMap map[string]*url.URL, logger log.Logger) *HTTP
 
 // Proxy is a ProxyFunc.
 func (p *HTTPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage) {
-	if msg.Protocol != proto.HTTP {
+	switch msg.ForwardedProto {
+	case proto.HTTP, proto.HTTPS:
+		// ok
+	default:
 		p.logger.Log(
 			"level", 0,
 			"msg", "unsupported protocol",

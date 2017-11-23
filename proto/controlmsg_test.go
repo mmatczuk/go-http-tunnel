@@ -20,20 +20,20 @@ func TestControlMessageWriteRead(t *testing.T) {
 	}{
 		{
 			&ControlMessage{
-				Action:        "action",
-				Protocol:      "protocol",
-				ForwardedFor:  "forwarded_for",
-				ForwardedHost: "forwarded_host",
+				Action:         "action",
+				ForwardedFor:   "forwarded_for",
+				ForwardedHost:  "forwarded_host",
+				ForwardedProto: "forwarded_proto",
 			},
 			nil,
 		},
 		{
 			&ControlMessage{
-				Protocol:      "protocol",
-				ForwardedFor:  "forwarded_for",
-				ForwardedHost: "forwarded_host",
+				ForwardedFor:   "forwarded_for",
+				ForwardedHost:  "forwarded_host",
+				ForwardedProto: "forwarded_proto",
 			},
-			errors.New("missing headers: [T-Action]"),
+			errors.New("missing headers: [X-Action]"),
 		},
 		{
 			&ControlMessage{
@@ -41,23 +41,23 @@ func TestControlMessageWriteRead(t *testing.T) {
 				ForwardedFor:  "forwarded_for",
 				ForwardedHost: "forwarded_host",
 			},
-			errors.New("missing headers: [T-Proto]"),
+			errors.New("missing headers: [X-Forwarded-Proto]"),
 		},
 		{
 			&ControlMessage{
-				Action:        "action",
-				Protocol:      "protocol",
-				ForwardedHost: "forwarded_host",
+				Action:         "action",
+				ForwardedHost:  "forwarded_host",
+				ForwardedProto: "forwarded_proto",
 			},
-			errors.New("missing headers: [T-Forwarded-For]"),
+			errors.New("missing headers: [X-Forwarded-For]"),
 		},
 		{
 			&ControlMessage{
-				Action:       "action",
-				Protocol:     "protocol",
-				ForwardedFor: "forwarded_for",
+				Action:         "action",
+				ForwardedFor:   "forwarded_for",
+				ForwardedProto: "forwarded_proto",
 			},
-			errors.New("missing headers: [T-Forwarded-By]"),
+			errors.New("missing headers: [X-Forwarded-Host]"),
 		},
 	}
 

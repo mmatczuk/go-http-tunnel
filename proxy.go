@@ -26,8 +26,8 @@ type ProxyFuncs struct {
 func Proxy(p ProxyFuncs) ProxyFunc {
 	return func(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage) {
 		var f ProxyFunc
-		switch msg.Protocol {
-		case proto.HTTP:
+		switch msg.ForwardedProto {
+		case proto.HTTP, proto.HTTPS:
 			f = p.HTTP
 		case proto.TCP, proto.TCP4, proto.TCP6, proto.UNIX:
 			f = p.TCP
