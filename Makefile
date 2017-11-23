@@ -4,6 +4,10 @@ all: clean check test
 clean:
 	@go clean -r
 
+.PHONY: fmt
+fmt:
+	@go fmt ./...
+
 .PHONY: check
 check: .check-fmt .check-vet .check-lint .check-ineffassign .check-mega .check-misspell
 
