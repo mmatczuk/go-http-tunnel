@@ -11,12 +11,12 @@ import (
 
 // Protocol HTTP headers.
 const (
-	HeaderError        = "T-Error"
+	HeaderError = "X-Error"
 
-	HeaderAction       = "T-Action"
-	HeaderProtocol     = "T-Proto"
-	HeaderForwardedFor = "T-Forwarded-For"
-	HeaderForwardedBy  = "T-Forwarded-By"
+	HeaderAction       = "X-Action"
+	HeaderProtocol     = "X-Proto"
+	HeaderForwardedFor = "X-Forwarded-For"
+	HeaderForwardedBy  = "X-Forwarded-By"
 )
 
 // Known actions.
