@@ -22,24 +22,24 @@ func TestControlMessage_WriteParse(t *testing.T) {
 			&ControlMessage{
 				Action:       "action",
 				Protocol:     "protocol",
-				ForwardedFor: "host-for",
-				ForwardedBy:  "host-by",
+				ForwardedFor: "forwarded_for",
+				ForwardedBy:  "forwarded_by",
 			},
 			nil,
 		},
 		{
 			&ControlMessage{
 				Protocol:     "protocol",
-				ForwardedFor: "host-for",
-				ForwardedBy:  "host-by",
+				ForwardedFor: "forwarded_for",
+				ForwardedBy:  "forwarded_by",
 			},
 			errors.New("missing headers: [T-Action]"),
 		},
 		{
 			&ControlMessage{
 				Action:       "action",
-				ForwardedFor: "host-for",
-				ForwardedBy:  "host-by",
+				ForwardedFor: "forwarded_for",
+				ForwardedBy:  "forwarded_by",
 			},
 			errors.New("missing headers: [T-Proto]"),
 		},
@@ -47,7 +47,7 @@ func TestControlMessage_WriteParse(t *testing.T) {
 			&ControlMessage{
 				Action:      "action",
 				Protocol:    "protocol",
-				ForwardedBy: "host-by",
+				ForwardedBy: "forwarded_by",
 			},
 			errors.New("missing headers: [T-Forwarded-For]"),
 		},
@@ -55,7 +55,7 @@ func TestControlMessage_WriteParse(t *testing.T) {
 			&ControlMessage{
 				Action:       "action",
 				Protocol:     "protocol",
-				ForwardedFor: "host-for",
+				ForwardedFor: "forwarded_for",
 			},
 			errors.New("missing headers: [T-Forwarded-By]"),
 		},
