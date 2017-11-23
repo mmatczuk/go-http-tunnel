@@ -45,7 +45,8 @@ type ClientConfig struct {
 // messages. It uses ProxyFunc for transferring data between server and local
 // services.
 type Client struct {
-	config         *ClientConfig
+	config *ClientConfig
+
 	conn           net.Conn
 	connMu         sync.Mutex
 	httpServer     *http2.Server

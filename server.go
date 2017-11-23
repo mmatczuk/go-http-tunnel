@@ -41,7 +41,8 @@ type ServerConfig struct {
 // tunnel connection.
 type Server struct {
 	*registry
-	config     *ServerConfig
+	config *ServerConfig
+
 	listener   net.Listener
 	connPool   *connPool
 	httpClient *http.Client
@@ -71,7 +72,12 @@ func NewServer(config *ServerConfig) (*Server, error) {
 	pool := newConnPool(t, s.disconnected)
 	t.ConnPool = pool
 	s.connPool = pool
-	s.httpClient = &http.Client{Transport: t}
+	s.httpClient = &http.Client{
+		Transport: t,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 
 	return s, nil
 }
@@ -472,6 +478,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"level", 0,
 			"action", "round trip failed",
 			"addr", r.RemoteAddr,
+			"host", r.Host,
 			"url", r.URL,
 			"err", err,
 		)
