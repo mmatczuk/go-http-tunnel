@@ -9,7 +9,7 @@ fmt:
 	@go fmt ./...
 
 .PHONY: check
-check: .check-fmt .check-vet .check-lint .check-ineffassign .check-mega .check-misspell
+check: .check-fmt .check-vet .check-lint .check-ineffassign .check-mega .check-misspell .check-vendor
 
 .PHONY: .check-fmt
 .check-fmt:
@@ -37,6 +37,10 @@ check: .check-fmt .check-vet .check-lint .check-ineffassign .check-mega .check-m
 .PHONY: .check-mega
 .check-mega:
 	@megacheck ./...
+
+.PHONY: .check-vendor
+.check-vendor:
+	@dep ensure -no-vendor -dry-run
 
 .PHONY: test
 test:
