@@ -20,34 +20,34 @@ func TestControlMessageWriteRead(t *testing.T) {
 	}{
 		{
 			&ControlMessage{
-				Action:       "action",
-				Protocol:     "protocol",
-				ForwardedFor: "forwarded_for",
-				ForwardedBy:  "forwarded_by",
+				Action:        "action",
+				Protocol:      "protocol",
+				ForwardedFor:  "forwarded_for",
+				ForwardedHost: "forwarded_host",
 			},
 			nil,
 		},
 		{
 			&ControlMessage{
-				Protocol:     "protocol",
-				ForwardedFor: "forwarded_for",
-				ForwardedBy:  "forwarded_by",
+				Protocol:      "protocol",
+				ForwardedFor:  "forwarded_for",
+				ForwardedHost: "forwarded_host",
 			},
 			errors.New("missing headers: [T-Action]"),
 		},
 		{
 			&ControlMessage{
-				Action:       "action",
-				ForwardedFor: "forwarded_for",
-				ForwardedBy:  "forwarded_by",
+				Action:        "action",
+				ForwardedFor:  "forwarded_for",
+				ForwardedHost: "forwarded_host",
 			},
 			errors.New("missing headers: [T-Proto]"),
 		},
 		{
 			&ControlMessage{
-				Action:      "action",
-				Protocol:    "protocol",
-				ForwardedBy: "forwarded_by",
+				Action:        "action",
+				Protocol:      "protocol",
+				ForwardedHost: "forwarded_host",
 			},
 			errors.New("missing headers: [T-Forwarded-For]"),
 		},

@@ -17,7 +17,7 @@ import (
 type TCPProxy struct {
 	// localAddr specifies default TCP address of the local server.
 	localAddr string
-	// localAddrMap specifies mapping from ControlMessage ForwardedBy to
+	// localAddrMap specifies mapping from ControlMessage.ForwardedHost to
 	// local server address, keys may contain host and port, only host or
 	// only port. The order of precedence is the following
 	// * host and port
@@ -76,7 +76,7 @@ func (p *TCPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage
 		return
 	}
 
-	target := p.localAddrFor(msg.ForwardedBy)
+	target := p.localAddrFor(msg.ForwardedHost)
 	if target == "" {
 		p.logger.Log(
 			"level", 1,
@@ -102,7 +102,7 @@ func (p *TCPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage
 	done := make(chan struct{})
 	go func() {
 		transfer(flushWriter{w}, local, log.NewContext(p.logger).With(
-			"dst", msg.ForwardedBy,
+			"dst", msg.ForwardedHost,
 			"src", target,
 		))
 		close(done)
@@ -110,7 +110,7 @@ func (p *TCPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage
 
 	transfer(local, r, log.NewContext(p.logger).With(
 		"dst", target,
-		"src", msg.ForwardedBy,
+		"src", msg.ForwardedHost,
 	))
 
 	<-done

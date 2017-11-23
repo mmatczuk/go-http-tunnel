@@ -24,7 +24,7 @@ type HTTPProxy struct {
 	httputil.ReverseProxy
 	// localURL specifies default base URL of local service.
 	localURL *url.URL
-	// localURLMap specifies mapping from ControlMessage ForwardedBy to
+	// localURLMap specifies mapping from ControlMessage.ForwardedHost to
 	// local service URL, keys may contain host and port, only host or
 	// only port. The order of precedence is the following
 	// * host and port
@@ -101,7 +101,7 @@ func (p *HTTPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessag
 		)
 		return
 	}
-	req.URL.Host = msg.ForwardedBy
+	req.URL.Host = msg.ForwardedHost
 
 	p.ServeHTTP(rw, req)
 }

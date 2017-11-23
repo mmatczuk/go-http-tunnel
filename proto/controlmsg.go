@@ -13,10 +13,10 @@ import (
 const (
 	HeaderError = "X-Error"
 
-	HeaderAction       = "X-Action"
-	HeaderProtocol     = "X-Proto"
-	HeaderForwardedFor = "X-Forwarded-For"
-	HeaderForwardedBy  = "X-Forwarded-By"
+	HeaderAction        = "X-Action"
+	HeaderProtocol      = "X-Proto"
+	HeaderForwardedFor  = "X-Forwarded-For"
+	HeaderForwardedHost = "X-Forwarded-Host"
 )
 
 // Known actions.
@@ -38,20 +38,20 @@ const (
 // used to inform client about the data and action to take. Based on that client
 // routes requests to backend services.
 type ControlMessage struct {
-	Action       string
-	Protocol     string
-	ForwardedFor string
-	ForwardedBy  string
-	Path         string
+	Action        string
+	Protocol      string
+	ForwardedFor  string
+	ForwardedHost string
+	Path          string
 }
 
 // ReadControlMessage reads ControlMessage from HTTP headers.
 func ReadControlMessage(h http.Header) (*ControlMessage, error) {
 	msg := ControlMessage{
-		Action:       h.Get(HeaderAction),
-		Protocol:     h.Get(HeaderProtocol),
-		ForwardedFor: h.Get(HeaderForwardedFor),
-		ForwardedBy:  h.Get(HeaderForwardedBy),
+		Action:        h.Get(HeaderAction),
+		Protocol:      h.Get(HeaderProtocol),
+		ForwardedFor:  h.Get(HeaderForwardedFor),
+		ForwardedHost: h.Get(HeaderForwardedHost),
 	}
 
 	var missing []string
@@ -65,8 +65,8 @@ func ReadControlMessage(h http.Header) (*ControlMessage, error) {
 	if msg.ForwardedFor == "" {
 		missing = append(missing, HeaderForwardedFor)
 	}
-	if msg.ForwardedBy == "" {
-		missing = append(missing, HeaderForwardedBy)
+	if msg.ForwardedHost == "" {
+		missing = append(missing, HeaderForwardedHost)
 	}
 
 	if len(missing) != 0 {
@@ -81,5 +81,5 @@ func (c *ControlMessage) WriteToHeader(h http.Header) {
 	h.Set(HeaderAction, string(c.Action))
 	h.Set(HeaderProtocol, c.Protocol)
 	h.Set(HeaderForwardedFor, c.ForwardedFor)
-	h.Set(HeaderForwardedBy, c.ForwardedBy)
+	h.Set(HeaderForwardedHost, c.ForwardedHost)
 }

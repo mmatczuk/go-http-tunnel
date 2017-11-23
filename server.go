@@ -440,10 +440,10 @@ func (s *Server) listen(l net.Listener, identifier id.ID) {
 		}
 
 		msg := &proto.ControlMessage{
-			Action:       proto.ActionProxy,
-			Protocol:     l.Addr().Network(),
-			ForwardedFor: conn.RemoteAddr().String(),
-			ForwardedBy:  l.Addr().String(),
+			Action:        proto.ActionProxy,
+			Protocol:      l.Addr().Network(),
+			ForwardedFor:  conn.RemoteAddr().String(),
+			ForwardedHost: l.Addr().String(),
 		}
 		go func() {
 			if err := s.proxyConn(identifier, conn, msg); err != nil {
@@ -494,10 +494,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // RoundTrip is http.RoundTriper implementation.
 func (s *Server) RoundTrip(r *http.Request) (*http.Response, error) {
 	msg := &proto.ControlMessage{
-		Action:       proto.ActionProxy,
-		Protocol:     proto.HTTP,
-		ForwardedFor: r.RemoteAddr,
-		ForwardedBy:  r.Host,
+		Action:        proto.ActionProxy,
+		Protocol:      proto.HTTP,
+		ForwardedFor:  r.RemoteAddr,
+		ForwardedHost: r.Host,
 	}
 
 	identifier, auth, ok := s.Subscriber(r.Host)
