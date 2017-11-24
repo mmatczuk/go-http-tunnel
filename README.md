@@ -9,7 +9,7 @@ Features:
 * TCP proxy
 * Auto reconnect using backoff strategy
 * Dynamic client management and eviction
-* Go `http.Handler` and `http.RoundTriper` implementations
+* Go `http.Handler` and `http.RoundTripper` implementations
 
 How it works:
 
