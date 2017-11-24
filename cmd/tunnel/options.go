@@ -56,7 +56,6 @@ func init() {
 }
 
 type options struct {
-	debug    bool
 	config   string
 	logTo    string
 	logLevel int
@@ -66,7 +65,6 @@ type options struct {
 }
 
 func parseArgs() (*options, error) {
-	debug := flag.Bool("debug", false, "Starts gops agent")
 	config := flag.String("config", "tunnel.yml", "Path to tunnel configuration file")
 	logTo := flag.String("log", "stdout", "Write log messages to this file, file name or 'stdout', 'stderr', 'none'")
 	logLevel := flag.Int("log-level", 1, "Level of messages to log, 0-3")
@@ -74,7 +72,6 @@ func parseArgs() (*options, error) {
 	flag.Parse()
 
 	opts := &options{
-		debug:    *debug,
 		config:   *config,
 		logTo:    *logTo,
 		logLevel: *logLevel,

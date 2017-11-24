@@ -36,7 +36,6 @@ func init() {
 
 // options specify arguments read command line arguments.
 type options struct {
-	debug      bool
 	httpAddr   string
 	httpsAddr  string
 	tunnelAddr string
@@ -49,7 +48,6 @@ type options struct {
 }
 
 func parseArgs() *options {
-	debug := flag.Bool("debug", false, "Starts gops agent")
 	httpAddr := flag.String("httpAddr", ":80", "Public address for HTTP connections, empty string to disable")
 	httpsAddr := flag.String("httpsAddr", ":443", "Public address listening for HTTPS connections, emptry string to disable")
 	tunnelAddr := flag.String("tunnelAddr", ":4443", "Public address listening for tunnel client")
@@ -62,7 +60,6 @@ func parseArgs() *options {
 	flag.Parse()
 
 	return &options{
-		debug:      *debug,
 		httpAddr:   *httpAddr,
 		httpsAddr:  *httpsAddr,
 		tunnelAddr: *tunnelAddr,
