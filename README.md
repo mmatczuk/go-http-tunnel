@@ -84,7 +84,7 @@ Sample configuration that exposes:
 looks like this
 
 ```yaml
-    server_addr: SERVER_IP:4443
+    server_addr: SERVER_IP:5223
     insecure_skip_verify: true
     tunnels:
       webui:
@@ -100,7 +100,7 @@ looks like this
 
 Configuration options:
 
-* `server_addr`: server TCP address, i.e. `54.12.12.45:4443`
+* `server_addr`: server TCP address, i.e. `54.12.12.45:5223`
 * `insecure_skip_verify`: controls whether a client verifies the server's certificate chain and host name, if using self signed certificates must be set to `true`, *default:* `false`
 * `tls_crt`: path to client TLS certificate, *default:* `client.crt` *in the config file directory*
 * `tls_key`: path to client TLS certificate key, *default:* `client.key` *in the config file directory*

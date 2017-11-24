@@ -27,7 +27,7 @@ Examples:
 	tunnel start-all
 
 config.yaml:
-	server_addr: SERVER_IP:4443
+	server_addr: SERVER_IP:5223
 	insecure_skip_verify: true
 	tunnels:
 	  webui:
