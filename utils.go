@@ -10,13 +10,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/felixge/tcpkeepalive"
 	"github.com/mmatczuk/go-http-tunnel/log"
 )
-
-func keepAlive(conn net.Conn) error {
-	return tcpkeepalive.SetKeepAlive(conn, DefaultKeepAliveIdleTime, DefaultKeepAliveCount, DefaultKeepAliveInterval)
-}
 
 func transfer(dst io.Writer, src io.Reader, logger log.Logger) {
 	n, err := io.Copy(dst, src)
