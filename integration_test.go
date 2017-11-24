@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -33,8 +34,19 @@ const (
 
 // echoHTTP starts serving HTTP requests on listener l, it accepts connections,
 // reads request body and writes is back in response.
-func echoHTTP(l net.Listener) {
+func echoHTTP(t testing.TB, l net.Listener) {
 	http.Serve(l, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		prior := strings.Join(r.Header["X-Forwarded-For"], ", ")
+		if len(strings.Split(prior, ",")) != 2 {
+			t.Fatal(r.Header)
+		}
+		if !strings.Contains(r.Header.Get("X-Forwarded-Host"), "localhost:") {
+			t.Fatal(r.Header)
+		}
+		if r.Header.Get("X-Forwarded-Proto") != "http" {
+			t.Fatal(r.Header)
+		}
+
 		w.WriteHeader(http.StatusOK)
 		if r.Body != nil {
 			body, err := ioutil.ReadAll(r.Body)
@@ -59,7 +71,7 @@ func echoTCP(l net.Listener) {
 	}
 }
 
-func makeEcho(t *testing.T) (http net.Listener, tcp net.Listener) {
+func makeEcho(t testing.TB) (http net.Listener, tcp net.Listener) {
 	var err error
 
 	// TCP echo
@@ -74,12 +86,12 @@ func makeEcho(t *testing.T) (http net.Listener, tcp net.Listener) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	go echoHTTP(http)
+	go echoHTTP(t, http)
 
 	return
 }
 
-func makeTunnelServer(t *testing.T) *tunnel.Server {
+func makeTunnelServer(t testing.TB) *tunnel.Server {
 	cert, identifier := selfSignedCert()
 	s, err := tunnel.NewServer(&tunnel.ServerConfig{
 		Addr:      ":0",
@@ -95,7 +107,7 @@ func makeTunnelServer(t *testing.T) *tunnel.Server {
 	return s
 }
 
-func makeTunnelClient(t *testing.T, serverAddr string, httpLocalAddr, httpAddr, tcpLocalAddr, tcpAddr net.Addr) *tunnel.Client {
+func makeTunnelClient(t testing.TB, serverAddr string, httpLocalAddr, httpAddr, tcpLocalAddr, tcpAddr net.Addr) *tunnel.Client {
 	httpProxy := tunnel.NewMultiHTTPProxy(map[string]*url.URL{
 		"localhost:" + port(httpLocalAddr): {
 			Scheme: "http",
@@ -189,7 +201,7 @@ func TestIntegration(t *testing.T) {
 	wg.Wait()
 }
 
-func testHTTP(t *testing.T, addr net.Addr, payload []byte, repeat uint) {
+func testHTTP(t testing.TB, addr net.Addr, payload []byte, repeat uint) {
 	url := fmt.Sprintf("http://localhost:%s/some/path", port(addr))
 
 	for repeat > 0 {
@@ -218,7 +230,7 @@ func testHTTP(t *testing.T, addr net.Addr, payload []byte, repeat uint) {
 	}
 }
 
-func testTCP(t *testing.T, addr net.Addr, payload []byte, repeat uint) {
+func testTCP(t testing.TB, addr net.Addr, payload []byte, repeat uint) {
 	conn, err := net.Dial("tcp", addr.String())
 	if err != nil {
 		t.Fatal("Dial failed", err)

@@ -45,7 +45,8 @@ type ClientConfig struct {
 // messages. It uses ProxyFunc for transferring data between server and local
 // services.
 type Client struct {
-	config         *ClientConfig
+	config *ClientConfig
+
 	conn           net.Conn
 	connMu         sync.Mutex
 	httpServer     *http2.Server
@@ -238,7 +239,7 @@ func (c *Client) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	msg, err := proto.ReadControlMessage(r.Header)
+	msg, err := proto.ReadControlMessage(r)
 	if err != nil {
 		c.logger.Log(
 			"level", 1,

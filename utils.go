@@ -37,6 +37,29 @@ func transfer(dst io.Writer, src io.Reader, logger log.Logger) {
 	)
 }
 
+func setXForwardedFor(h http.Header, remoteAddr string) {
+	clientIP, _, err := net.SplitHostPort(remoteAddr)
+	if err == nil {
+		// If we aren't the first proxy retain prior
+		// X-Forwarded-For information as a comma+space
+		// separated list and fold multiple headers into one.
+		if prior, ok := h["X-Forwarded-For"]; ok {
+			clientIP = strings.Join(prior, ", ") + ", " + clientIP
+		}
+		h.Set("X-Forwarded-For", clientIP)
+	}
+}
+
+func cloneHeader(h http.Header) http.Header {
+	h2 := make(http.Header, len(h))
+	for k, vv := range h {
+		vv2 := make([]string, len(vv))
+		copy(vv2, vv)
+		h2[k] = vv2
+	}
+	return h2
+}
+
 func copyHeader(dst, src http.Header) {
 	for k, v := range src {
 		vv := make([]string, len(v))

@@ -41,7 +41,8 @@ type ServerConfig struct {
 // tunnel connection.
 type Server struct {
 	*registry
-	config     *ServerConfig
+	config *ServerConfig
+
 	listener   net.Listener
 	connPool   *connPool
 	httpClient *http.Client
@@ -71,7 +72,12 @@ func NewServer(config *ServerConfig) (*Server, error) {
 	pool := newConnPool(t, s.disconnected)
 	t.ConnPool = pool
 	s.connPool = pool
-	s.httpClient = &http.Client{Transport: t}
+	s.httpClient = &http.Client{
+		Transport: t,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 
 	return s, nil
 }
@@ -440,10 +446,9 @@ func (s *Server) listen(l net.Listener, identifier id.ID) {
 		}
 
 		msg := &proto.ControlMessage{
-			Action:       proto.ActionProxy,
-			Protocol:     l.Addr().Network(),
-			ForwardedFor: conn.RemoteAddr().String(),
-			ForwardedBy:  l.Addr().String(),
+			Action:         proto.ActionProxy,
+			ForwardedHost:  l.Addr().String(),
+			ForwardedProto: l.Addr().Network(),
 		}
 		go func() {
 			if err := s.proxyConn(identifier, conn, msg); err != nil {
@@ -472,6 +477,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"level", 0,
 			"action", "round trip failed",
 			"addr", r.RemoteAddr,
+			"host", r.Host,
 			"url", r.URL,
 			"err", err,
 		)
@@ -493,26 +499,47 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // RoundTrip is http.RoundTriper implementation.
 func (s *Server) RoundTrip(r *http.Request) (*http.Response, error) {
-	msg := &proto.ControlMessage{
-		Action:       proto.ActionProxy,
-		Protocol:     proto.HTTP,
-		ForwardedFor: r.RemoteAddr,
-		ForwardedBy:  r.Host,
-	}
-
 	identifier, auth, ok := s.Subscriber(r.Host)
 	if !ok {
 		return nil, errClientNotSubscribed
 	}
+
+	outr := r.WithContext(r.Context())
+	if r.ContentLength == 0 {
+		outr.Body = nil // Issue 16036: nil Body for http.Transport retries
+	}
+	outr.Header = cloneHeader(r.Header)
+
 	if auth != nil {
 		user, password, _ := r.BasicAuth()
 		if auth.User != user || auth.Password != password {
 			return nil, errUnauthorised
 		}
-		r.Header.Del("Authorization")
+		outr.Header.Del("Authorization")
 	}
 
-	return s.proxyHTTP(identifier, r, msg)
+	setXForwardedFor(outr.Header, r.RemoteAddr)
+
+	scheme := r.URL.Scheme
+	if scheme == "" {
+		if r.TLS != nil {
+			scheme = proto.HTTPS
+		} else {
+			scheme = proto.HTTP
+		}
+	}
+	if r.Header.Get("X-Forwarded-Host") == "" {
+		outr.Header.Set("X-Forwarded-Host", r.Host)
+		outr.Header.Set("X-Forwarded-Proto", scheme)
+	}
+
+	msg := &proto.ControlMessage{
+		Action:         proto.ActionProxy,
+		ForwardedHost:  r.Host,
+		ForwardedProto: scheme,
+	}
+
+	return s.proxyHTTP(identifier, outr, msg)
 }
 
 func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMessage) error {
@@ -641,7 +668,7 @@ func (s *Server) connectRequest(identifier id.ID, msg *proto.ControlMessage, r i
 	if err != nil {
 		return nil, fmt.Errorf("could not create request: %s", err)
 	}
-	msg.Update(req.Header)
+	msg.WriteToHeader(req.Header)
 
 	return req, nil
 }

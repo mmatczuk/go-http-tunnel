@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-func TestControlMessage_WriteParse(t *testing.T) {
+func TestControlMessageWriteRead(t *testing.T) {
 	t.Parallel()
 
 	data := []struct {
@@ -20,51 +20,41 @@ func TestControlMessage_WriteParse(t *testing.T) {
 	}{
 		{
 			&ControlMessage{
-				Action:       "action",
-				Protocol:     "protocol",
-				ForwardedFor: "host-for",
-				ForwardedBy:  "host-by",
+				Action:         "action",
+				ForwardedHost:  "forwarded_host",
+				ForwardedProto: "forwarded_proto",
 			},
 			nil,
 		},
 		{
 			&ControlMessage{
-				Protocol:     "protocol",
-				ForwardedFor: "host-for",
-				ForwardedBy:  "host-by",
+				ForwardedHost:  "forwarded_host",
+				ForwardedProto: "forwarded_proto",
 			},
-			errors.New("missing headers: [T-Action]"),
+			errors.New("missing headers: [X-Action]"),
 		},
 		{
 			&ControlMessage{
-				Action:       "action",
-				ForwardedFor: "host-for",
-				ForwardedBy:  "host-by",
+				Action:        "action",
+				ForwardedHost: "forwarded_host",
 			},
-			errors.New("missing headers: [T-Proto]"),
+			errors.New("missing headers: [X-Forwarded-Proto]"),
 		},
 		{
 			&ControlMessage{
-				Action:      "action",
-				Protocol:    "protocol",
-				ForwardedBy: "host-by",
+				Action:         "action",
+				ForwardedProto: "forwarded_proto",
 			},
-			errors.New("missing headers: [T-Forwarded-For]"),
-		},
-		{
-			&ControlMessage{
-				Action:       "action",
-				Protocol:     "protocol",
-				ForwardedFor: "host-for",
-			},
-			errors.New("missing headers: [T-Forwarded-By]"),
+			errors.New("missing headers: [X-Forwarded-Host]"),
 		},
 	}
 
 	for i, tt := range data {
-		h := http.Header{}
-		tt.msg.Update(h)
-		actual, err := ReadControlMessage(h)
+		r := http.Request{}
+		r.Header = http.Header{}
+		tt.msg.WriteToHeader(r.Header)
+
+		actual, err := ReadControlMessage(&r)
 		if tt.err != nil {
 			if err == nil {
 				t.Error(i, "expected error")

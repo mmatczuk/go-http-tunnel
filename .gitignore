@@ -1,5 +1,6 @@
-### Release
-build
+### Tunnel
+.tunnel/
+build/
 
 ### Go
 *.cov
