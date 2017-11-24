@@ -46,6 +46,7 @@ type ClientConfig struct {
 	InsecureSkipVerify bool               `yaml:"insecure_skip_verify"`
 	TLSCrt             string             `yaml:"tls_crt"`
 	TLSKey             string             `yaml:"tls_key"`
+	RootCA             string             `yaml:"root_ca"`
 	Backoff            BackoffConfig      `yaml:"backoff"`
 	Tunnels            map[string]*Tunnel `yaml:"tunnels"`
 }

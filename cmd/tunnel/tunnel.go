@@ -8,6 +8,8 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"io/ioutil"
+	"net"
 	"net/url"
 	"os"
 	"sort"
@@ -38,14 +40,14 @@ func main() {
 	}
 
 	// read configuration file
-	c, err := loadClientConfigFromFile(opts.config)
+	config, err := loadClientConfigFromFile(opts.config)
 	if err != nil {
 		fatal("configuration error: %s", err)
 	}
 
 	switch opts.command {
 	case "id":
-		cert, err := tls.LoadX509KeyPair(c.TLSCrt, c.TLSKey)
+		cert, err := tls.LoadX509KeyPair(config.TLSCrt, config.TLSKey)
 		if err != nil {
 			fatal("failed to load key pair: %s", err)
 		}
@@ -58,7 +60,7 @@ func main() {
 		return
 	case "list":
 		var names []string
-		for n := range c.Tunnels {
+		for n := range config.Tunnels {
 			names = append(names, n)
 		}
 
@@ -72,32 +74,32 @@ func main() {
 	case "start":
 		tunnels := make(map[string]*Tunnel)
 		for _, arg := range opts.args {
-			t, ok := c.Tunnels[arg]
+			t, ok := config.Tunnels[arg]
 			if !ok {
 				fatal("no such tunnel %q", arg)
 			}
 			tunnels[arg] = t
 		}
-		c.Tunnels = tunnels
+		config.Tunnels = tunnels
 	}
 
-	cert, err := tls.LoadX509KeyPair(c.TLSCrt, c.TLSKey)
+	tlsconf, err := tlsConfig(config)
 	if err != nil {
-		fatal("failed to load certificate: %s", err)
+		fatal("failed to configure tls: %s", err)
 	}
 
-	b, err := yaml.Marshal(c)
+	b, err := yaml.Marshal(config)
 	if err != nil {
-		fatal("failed to load c: %s", err)
+		fatal("failed to load config: %s", err)
 	}
 	logger.Log("config", string(b))
 
 	client := tunnel.NewClient(&tunnel.ClientConfig{
-		ServerAddr:      c.ServerAddr,
-		TLSClientConfig: tlsConfig(cert, c),
-		Backoff:         expBackoff(c.Backoff),
-		Tunnels:         tunnels(c.Tunnels),
-		Proxy:           proxy(c.Tunnels, logger),
+		ServerAddr:      config.ServerAddr,
+		TLSClientConfig: tlsconf,
+		Backoff:         expBackoff(config.Backoff),
+		Tunnels:         tunnels(config.Tunnels),
+		Proxy:           proxy(config.Tunnels, logger),
 		Logger:          logger,
 	})
 
@@ -106,11 +108,35 @@ func main() {
 	}
 }
 
-func tlsConfig(cert tls.Certificate, c *ClientConfig) *tls.Config {
-	return &tls.Config{
-		Certificates:       []tls.Certificate{cert},
-		InsecureSkipVerify: c.InsecureSkipVerify,
+func tlsConfig(config *ClientConfig) (*tls.Config, error) {
+	cert, err := tls.LoadX509KeyPair(config.TLSCrt, config.TLSKey)
+	if err != nil {
+		return nil, err
 	}
+
+	var roots *x509.CertPool
+	if config.RootCA != "" {
+		roots = x509.NewCertPool()
+		rootPEM, err := ioutil.ReadFile(config.RootCA)
+		if err != nil {
+			return nil, err
+		}
+		if ok := roots.AppendCertsFromPEM(rootPEM); !ok {
+			return nil, err
+		}
+	}
+
+	host, _, err := net.SplitHostPort(config.ServerAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	return &tls.Config{
+		ServerName:         host,
+		Certificates:       []tls.Certificate{cert},
+		InsecureSkipVerify: config.InsecureSkipVerify,
+		RootCAs:            roots,
+	}, nil
 }
 
 func expBackoff(c BackoffConfig) *backoff.ExponentialBackOff {

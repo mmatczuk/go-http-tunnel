@@ -15,7 +15,7 @@ How it works:
 
 Client opens a TLS connection to a server. Server accepts connections from known clients only, client is recognised by it's TLS certificate ID. The server is publicly available and proxies incoming connections to the client. Then the connection is further proxied in the client's network.
 
-Tunnel is based HTTP/2 for speed and security. There is a single TCP connection between client and server and all the proxied connections are multiplexed using HTTP/2. 
+Tunnel is based HTTP/2 for speed and security. There is a single TCP connection between client and server and all the proxied connections are multiplexed using HTTP/2.
 
 Common use cases:
 
@@ -31,7 +31,7 @@ Build the latest version.
 $ go get -u github.com/mmatczuk/go-http-tunnel/cmd/...
 ```
 
-Alternatively [download the latest release](https://github.com/mmatczuk/go-http-tunnel/releases/latest). 
+Alternatively [download the latest release](https://github.com/mmatczuk/go-http-tunnel/releases/latest).
 
 ## Running
 
@@ -53,7 +53,7 @@ Run client:
 
 * Install `tunnel` binary
 * Make `.tunnel` directory in your project directory
-* Copy `client.key`, `client.crt` to `.tunnel` 
+* Copy `client.key`, `client.crt` to `.tunnel`
 * Create configuration file `tunnel.yml` in `.tunnel`
 * Start all tunnels
 
@@ -67,13 +67,13 @@ Run server:
 * Make `.tunneld` directory
 * Copy `server.key`, `server.crt` to `.tunneld`
 * Get client identifier (`tunnel -config ./tunnel/tunnel.yml id`), identifier should look like this `YMBKT3V-ESUTZ2Z-7MRILIJ-T35FHGO-D2DHO7D-FXMGSSR-V4LBSZX-BNDONQ4`
-* Start tunnel server 
+* Start tunnel server
 
 ```bash
 $ tunneld -tlsCrt .tunneld/server.crt -tlsKey .tunneld/server.key -clients YMBKT3V-ESUTZ2Z-7MRILIJ-T35FHGO-D2DHO7D-FXMGSSR-V4LBSZX-BNDONQ4
-``` 
+```
 
-This will run HTTP server on port `80` and HTTPS (HTTP/2) server on port `443`. If you want to use HTTPS it's recommended to get a properly signed certificate to avoid security warnings. 
+This will run HTTP server on port `80` and HTTPS (HTTP/2) server on port `443`. If you want to use HTTPS it's recommended to get a properly signed certificate to avoid security warnings.
 
 ## Configuration
 
@@ -81,7 +81,7 @@ The tunnel client `tunnel` requires configuration file, by default it will try r
 
 Sample configuration that exposes:
 
-* `localhost:8080` as `webui.my-tunnel-host.com` 
+* `localhost:8080` as `webui.my-tunnel-host.com`
 * host in private network for ssh connections
 
 looks like this
@@ -104,10 +104,11 @@ looks like this
 Configuration options:
 
 * `server_addr`: server TCP address, i.e. `54.12.12.45:5223`
-* `insecure_skip_verify`: controls whether a client verifies the server's certificate chain and host name, if using self signed certificates must be set to `true`, *default:* `false`
+* `insecure_skip_verify`: controls whether a client should skip the verification of the server's certificate chain and host name. If set to `true` the client will accept *any* server certificate as valid, *default:* `false`
 * `tls_crt`: path to client TLS certificate, *default:* `client.crt` *in the config file directory*
 * `tls_key`: path to client TLS certificate key, *default:* `client.key` *in the config file directory*
-*  `tunnels / [name]` 
+* `root_ca`: path to trusted root certificate authority pool file, *default* is the host's root CA set
+*  `tunnels / [name]`
     * `proto`: tunnel protocol, `http` or `tcp`
     * `addr`: forward traffic to this local port number or network address, for `proto=http` this can be full URL i.e. `https://machine/sub/path/?plus=params`, supports URL schemes `http` and `https`
     * `auth`: (`proto=http`) (optional) basic authentication credentials to enforce on tunneled requests, format `user:password`
