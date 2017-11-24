@@ -11,14 +11,4 @@ var (
 	DefaultTimeout = 10 * time.Second
 	// DefaultPingTimeout specifies a ping timeout.
 	DefaultPingTimeout = 500 * time.Millisecond
-
-	// DefaultKeepAliveIdleTime specifies how long connection can be idle
-	// before sending keepalive message.
-	DefaultKeepAliveIdleTime = 15 * time.Minute
-	// DefaultKeepAliveCount specifies maximal number of keepalive messages
-	// sent before marking connection as dead.
-	DefaultKeepAliveCount = 8
-	// DefaultKeepAliveInterval specifies how often retry sending keepalive
-	// messages when no response is received.
-	DefaultKeepAliveInterval = 5 * time.Second
 )
