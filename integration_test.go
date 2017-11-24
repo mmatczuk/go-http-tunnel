@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -33,8 +34,19 @@ const (
 
 // echoHTTP starts serving HTTP requests on listener l, it accepts connections,
 // reads request body and writes is back in response.
-func echoHTTP(l net.Listener) {
+func echoHTTP(t *testing.T, l net.Listener) {
 	http.Serve(l, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		prior := strings.Join(r.Header["X-Forwarded-For"], ", ")
+		if len(strings.Split(prior, ",")) != 2 {
+			t.Fatal(r.Header)
+		}
+		if !strings.Contains(r.Header.Get("X-Forwarded-Host"), "localhost:") {
+			t.Fatal(r.Header)
+		}
+		if r.Header.Get("X-Forwarded-Proto") != "http" {
+			t.Fatal(r.Header)
+		}
+
 		w.WriteHeader(http.StatusOK)
 		if r.Body != nil {
 			body, err := ioutil.ReadAll(r.Body)
@@ -74,7 +86,7 @@ func makeEcho(t *testing.T) (http net.Listener, tcp net.Listener) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	go echoHTTP(http)
+	go echoHTTP(t, http)
 
 	return
 }
