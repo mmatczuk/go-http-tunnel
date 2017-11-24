@@ -6,7 +6,9 @@ package main
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
@@ -31,16 +33,15 @@ func main() {
 		fatal("failed to init logger: %s", err)
 	}
 
-	// load certs
-	cert, err := tls.LoadX509KeyPair(opts.tlsCrt, opts.tlsKey)
+	tlsconf, err := tlsConfig(opts)
 	if err != nil {
-		fatal("failed to load certificate: %s", err)
+		fatal("failed to configure tls: %s", err)
 	}
 
 	// setup server
 	server, err := tunnel.NewServer(&tunnel.ServerConfig{
 		Addr:      opts.tunnelAddr,
-		TLSConfig: tlsConfig(cert),
+		TLSConfig: tlsconf,
 		Logger:    logger,
 	})
 	if err != nil {
@@ -101,16 +102,38 @@ func main() {
 	server.Start()
 }
 
-func tlsConfig(cert tls.Certificate) *tls.Config {
+func tlsConfig(opts *options) (*tls.Config, error) {
+	// load certs
+	cert, err := tls.LoadX509KeyPair(opts.tlsCrt, opts.tlsKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// load root CA for client authentication
+	clientAuth := tls.RequireAnyClientCert
+	var roots *x509.CertPool
+	if opts.rootCA != "" {
+		roots = x509.NewCertPool()
+		rootPEM, err := ioutil.ReadFile(opts.rootCA)
+		if err != nil {
+			return nil, err
+		}
+		if ok := roots.AppendCertsFromPEM(rootPEM); !ok {
+			return nil, err
+		}
+		clientAuth = tls.RequireAndVerifyClientCert
+	}
+
 	return &tls.Config{
 		Certificates:             []tls.Certificate{cert},
-		ClientAuth:               tls.RequireAnyClientCert,
+		ClientAuth:               clientAuth,
+		ClientCAs:                roots,
 		SessionTicketsDisabled:   true,
 		MinVersion:               tls.VersionTLS12,
 		CipherSuites:             []uint16{tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256},
 		PreferServerCipherSuites: true,
 		NextProtos:               []string{"h2"},
-	}
+	}, nil
 }
 
 func fatal(format string, a ...interface{}) {
