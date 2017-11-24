@@ -17,7 +17,7 @@ Client opens a TLS connection to a server. Server accepts connections from known
 
 Tunnel is based HTTP/2 for speed and security. There is a single TCP connection between client and server and all the proxied connections are multiplexed using HTTP/2. 
 
-Popular use cases:
+Common use cases:
 
 * Hosting a game server from home
 * Developing webhook integrations
