@@ -7,6 +7,9 @@ Features:
 * HTTP proxy
 * HTTP [basic authentication](https://en.wikipedia.org/wiki/Basic_access_authentication)
 * TCP proxy
+* Auto reconnect using backoff strategy
+* Dynamic client management and eviction
+* Go `http.Handler` and `http.RoundTriper` implementations
 
 How it works:
 
