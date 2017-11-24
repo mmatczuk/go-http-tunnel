@@ -14,7 +14,6 @@ const (
 	HeaderError = "X-Error"
 
 	HeaderAction         = "X-Action"
-	HeaderForwardedFor   = "X-Forwarded-For"
 	HeaderForwardedHost  = "X-Forwarded-Host"
 	HeaderForwardedProto = "X-Forwarded-Proto"
 )
@@ -40,27 +39,24 @@ const (
 // routes requests to backend services.
 type ControlMessage struct {
 	Action         string
-	ForwardedFor   string
 	ForwardedHost  string
 	ForwardedProto string
+	RemoteAddr     string
 }
 
 // ReadControlMessage reads ControlMessage from HTTP headers.
-func ReadControlMessage(h http.Header) (*ControlMessage, error) {
+func ReadControlMessage(r *http.Request) (*ControlMessage, error) {
 	msg := ControlMessage{
-		Action:         h.Get(HeaderAction),
-		ForwardedFor:   h.Get(HeaderForwardedFor),
-		ForwardedHost:  h.Get(HeaderForwardedHost),
-		ForwardedProto: h.Get(HeaderForwardedProto),
+		Action:         r.Header.Get(HeaderAction),
+		ForwardedHost:  r.Header.Get(HeaderForwardedHost),
+		ForwardedProto: r.Header.Get(HeaderForwardedProto),
+		RemoteAddr:     r.RemoteAddr,
 	}
 
 	var missing []string
 
 	if msg.Action == "" {
 		missing = append(missing, HeaderAction)
-	}
-	if msg.ForwardedFor == "" {
-		missing = append(missing, HeaderForwardedFor)
 	}
 	if msg.ForwardedHost == "" {
 		missing = append(missing, HeaderForwardedHost)
@@ -79,7 +75,6 @@ func ReadControlMessage(h http.Header) (*ControlMessage, error) {
 // WriteToHeader writes ControlMessage to HTTP header.
 func (c *ControlMessage) WriteToHeader(h http.Header) {
 	h.Set(HeaderAction, string(c.Action))
-	h.Set(HeaderForwardedFor, c.ForwardedFor)
 	h.Set(HeaderForwardedHost, c.ForwardedHost)
 	h.Set(HeaderForwardedProto, c.ForwardedProto)
 }

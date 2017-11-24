@@ -105,14 +105,8 @@ func (p *HTTPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessag
 		return
 	}
 
+	setXForwardedFor(req.Header, msg.RemoteAddr)
 	req.URL.Host = msg.ForwardedHost
-
-	if req.Header.Get("X-Forwarded-Host") == "" {
-		req.Header.Set("X-Forwarded-Host", msg.ForwardedHost)
-	}
-	if req.Header.Get("X-Forwarded-Proto") == "" {
-		req.Header.Set("X-Forwarded-Proto", msg.ForwardedProto)
-	}
 
 	p.ServeHTTP(rw, req)
 }

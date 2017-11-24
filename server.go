@@ -447,7 +447,6 @@ func (s *Server) listen(l net.Listener, identifier id.ID) {
 
 		msg := &proto.ControlMessage{
 			Action:         proto.ActionProxy,
-			ForwardedFor:   conn.RemoteAddr().String(),
 			ForwardedHost:  l.Addr().String(),
 			ForwardedProto: l.Addr().Network(),
 		}
@@ -519,16 +518,7 @@ func (s *Server) RoundTrip(r *http.Request) (*http.Response, error) {
 		outr.Header.Del("Authorization")
 	}
 
-	clientIP, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err == nil {
-		// If we aren't the first proxy retain prior
-		// X-Forwarded-For information as a comma+space
-		// separated list and fold multiple headers into one.
-		if prior, ok := r.Header["X-Forwarded-For"]; ok {
-			clientIP = strings.Join(prior, ", ") + ", " + clientIP
-		}
-		outr.Header.Set("X-Forwarded-For", clientIP)
-	}
+	setXForwardedFor(outr.Header, r.RemoteAddr)
 
 	scheme := r.URL.Scheme
 	if scheme == "" {
@@ -538,9 +528,13 @@ func (s *Server) RoundTrip(r *http.Request) (*http.Response, error) {
 			scheme = proto.HTTP
 		}
 	}
+	if r.Header.Get("X-Forwarded-Host") == "" {
+		outr.Header.Set("X-Forwarded-Host", r.Host)
+		outr.Header.Set("X-Forwarded-Proto", scheme)
+	}
+
 	msg := &proto.ControlMessage{
 		Action:         proto.ActionProxy,
-		ForwardedFor:   clientIP,
 		ForwardedHost:  r.Host,
 		ForwardedProto: scheme,
 	}

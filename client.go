@@ -239,7 +239,7 @@ func (c *Client) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	msg, err := proto.ReadControlMessage(r.Header)
+	msg, err := proto.ReadControlMessage(r)
 	if err != nil {
 		c.logger.Log(
 			"level", 1,

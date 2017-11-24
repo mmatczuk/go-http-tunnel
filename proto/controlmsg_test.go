@@ -21,7 +21,6 @@ func TestControlMessageWriteRead(t *testing.T) {
 		{
 			&ControlMessage{
 				Action:         "action",
-				ForwardedFor:   "forwarded_for",
 				ForwardedHost:  "forwarded_host",
 				ForwardedProto: "forwarded_proto",
 			},
@@ -29,7 +28,6 @@ func TestControlMessageWriteRead(t *testing.T) {
 		},
 		{
 			&ControlMessage{
-				ForwardedFor:   "forwarded_for",
 				ForwardedHost:  "forwarded_host",
 				ForwardedProto: "forwarded_proto",
 			},
@@ -38,7 +36,6 @@ func TestControlMessageWriteRead(t *testing.T) {
 		{
 			&ControlMessage{
 				Action:        "action",
-				ForwardedFor:  "forwarded_for",
 				ForwardedHost: "forwarded_host",
 			},
 			errors.New("missing headers: [X-Forwarded-Proto]"),
@@ -46,15 +43,6 @@ func TestControlMessageWriteRead(t *testing.T) {
 		{
 			&ControlMessage{
 				Action:         "action",
-				ForwardedHost:  "forwarded_host",
-				ForwardedProto: "forwarded_proto",
-			},
-			errors.New("missing headers: [X-Forwarded-For]"),
-		},
-		{
-			&ControlMessage{
-				Action:         "action",
-				ForwardedFor:   "forwarded_for",
 				ForwardedProto: "forwarded_proto",
 			},
 			errors.New("missing headers: [X-Forwarded-Host]"),
@@ -62,9 +50,11 @@ func TestControlMessageWriteRead(t *testing.T) {
 	}
 
 	for i, tt := range data {
-		h := http.Header{}
-		tt.msg.WriteToHeader(h)
-		actual, err := ReadControlMessage(h)
+		r := http.Request{}
+		r.Header = http.Header{}
+		tt.msg.WriteToHeader(r.Header)
+
+		actual, err := ReadControlMessage(&r)
 		if tt.err != nil {
 			if err == nil {
 				t.Error(i, "expected error")
