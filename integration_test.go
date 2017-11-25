@@ -7,7 +7,6 @@ package tunnel_test
 import (
 	"bytes"
 	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -22,7 +21,6 @@ import (
 	"time"
 
 	"github.com/mmatczuk/go-http-tunnel"
-	"github.com/mmatczuk/go-http-tunnel/id"
 	"github.com/mmatczuk/go-http-tunnel/log"
 	"github.com/mmatczuk/go-http-tunnel/proto"
 )
@@ -92,16 +90,15 @@ func makeEcho(t testing.TB) (http net.Listener, tcp net.Listener) {
 }
 
 func makeTunnelServer(t testing.TB) *tunnel.Server {
-	cert, identifier := selfSignedCert()
 	s, err := tunnel.NewServer(&tunnel.ServerConfig{
-		Addr:      ":0",
-		TLSConfig: tlsConfig(cert),
-		Logger:    log.NewStdLogger(),
+		Addr:          ":0",
+		AutoSubscribe: true,
+		TLSConfig:     tlsConfig(),
+		Logger:        log.NewStdLogger(),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.Subscribe(identifier)
 	go s.Start()
 
 	return s
@@ -131,10 +128,9 @@ func makeTunnelClient(t testing.TB, serverAddr string, httpLocalAddr, httpAddr, 
 		},
 	}
 
-	cert, _ := selfSignedCert()
 	c, err := tunnel.NewClient(&tunnel.ClientConfig{
 		ServerAddr:      serverAddr,
-		TLSClientConfig: tlsConfig(cert),
+		TLSClientConfig: tlsConfig(),
 		Tunnels:         tunnels,
 		Proxy: tunnel.Proxy(tunnel.ProxyFuncs{
 			HTTP: httpProxy.Proxy,
@@ -319,23 +315,15 @@ func port(addr net.Addr) string {
 	return fmt.Sprint(addr.(*net.TCPAddr).Port)
 }
 
-func selfSignedCert() (tls.Certificate, id.ID) {
+func tlsConfig() *tls.Config {
 	cert, err := tls.LoadX509KeyPair("./testdata/selfsigned.crt", "./testdata/selfsigned.key")
 	if err != nil {
 		panic(err)
 	}
-	x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
-	if err != nil {
-		panic(err)
-	}
 
-	return cert, id.New(x509Cert.Raw)
-}
-
-func tlsConfig(cert tls.Certificate) *tls.Config {
 	c := &tls.Config{
 		Certificates:             []tls.Certificate{cert},
-		ClientAuth:               tls.RequestClientCert,
+		ClientAuth:               tls.RequireAnyClientCert,
 		SessionTicketsDisabled:   true,
 		InsecureSkipVerify:       true,
 		MinVersion:               tls.VersionTLS12,
