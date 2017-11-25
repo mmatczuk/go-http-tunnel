@@ -28,6 +28,9 @@ type ServerConfig struct {
 	// Addr is TCP address to listen for client connections. If empty ":0"
 	// is used.
 	Addr string
+	// AutoSubscribe if enabled will automatically subscribe new clients on
+	// first call.
+	AutoSubscribe bool
 	// TLSConfig specifies the tls configuration to use with tls.Listener.
 	TLSConfig *tls.Config
 	// Listener specifies optional listener for client connections. If nil
@@ -207,7 +210,9 @@ func (s *Server) handleClient(conn net.Conn) {
 
 	logger = logger.With("identifier", identifier)
 
-	if !s.IsSubscribed(identifier) {
+	if s.config.AutoSubscribe {
+		s.Subscribe(identifier)
+	} else if !s.IsSubscribed(identifier) {
 		logger.Log(
 			"level", 2,
 			"msg", "unknown client",
