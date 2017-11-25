@@ -38,22 +38,20 @@ func main() {
 		fatal("failed to configure tls: %s", err)
 	}
 
+	autoSubscribe := opts.clients == ""
+
 	// setup server
 	server, err := tunnel.NewServer(&tunnel.ServerConfig{
-		Addr:      opts.tunnelAddr,
-		TLSConfig: tlsconf,
-		Logger:    logger,
+		Addr:          opts.tunnelAddr,
+		AutoSubscribe: autoSubscribe,
+		TLSConfig:     tlsconf,
+		Logger:        logger,
 	})
 	if err != nil {
 		fatal("failed to create server: %s", err)
 	}
 
-	if opts.clients == "" {
-		logger.Log(
-			"level", 0,
-			"msg", "No clients",
-		)
-	} else {
+	if !autoSubscribe {
 		for _, c := range strings.Split(opts.clients, ",") {
 			if c == "" {
 				fatal("empty client id")
