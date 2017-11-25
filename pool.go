@@ -17,25 +17,23 @@ import (
 	"github.com/mmatczuk/go-http-tunnel/id"
 )
 
-type onDisconnectListener func(identifier id.ID)
-
 type connPair struct {
 	conn       net.Conn
 	clientConn *http2.ClientConn
 }
 
 type connPool struct {
-	t        *http2.Transport
-	conns    map[string]connPair // key is host:port
-	listener onDisconnectListener
-	mu       sync.RWMutex
+	t     *http2.Transport
+	conns map[string]connPair // key is host:port
+	free  func(identifier id.ID)
+	mu    sync.RWMutex
 }
 
-func newConnPool(t *http2.Transport, l onDisconnectListener) *connPool {
+func newConnPool(t *http2.Transport, f func(identifier id.ID)) *connPool {
 	return &connPool{
-		t:        t,
-		listener: l,
-		conns:    make(map[string]connPair),
+		t:     t,
+		free:  f,
+		conns: make(map[string]connPair),
 	}
 }
 
@@ -128,8 +126,8 @@ func (p *connPool) ping(cp connPair) error {
 func (p *connPool) close(cp connPair, addr string) {
 	cp.conn.Close()
 	delete(p.conns, addr)
-	if p.listener != nil {
-		p.listener(p.identifier(addr))
+	if p.free != nil {
+		p.free(p.identifier(addr))
 	}
 }
 
