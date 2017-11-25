@@ -31,25 +31,6 @@ func New(data []byte) ID {
 	return id
 }
 
-// NewFromString creates a new ID from the given string.
-func NewFromString(s string) ID {
-	return New([]byte(s))
-}
-
-// NewFromBytes creates a new ID with the value of the given byte slice.  The
-// given byte slice must be 32 bytes long (the same length as ID), or this
-// function will panic.
-func NewFromBytes(b []byte) ID {
-	var id ID
-
-	if len(b) != len(id) {
-		panic("invalid slice length for id")
-	}
-
-	copy(id[0:], b)
-	return id
-}
-
 // String returns the canonical representation of the ID.
 func (i ID) String() string {
 	ss := base32.StdEncoding.EncodeToString(i[:])
