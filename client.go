@@ -7,6 +7,7 @@ package tunnel
 import (
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -57,18 +58,18 @@ type Client struct {
 
 // NewClient creates a new unconnected Client based on configuration. Caller
 // must invoke Start() on returned instance in order to connect server.
-func NewClient(config *ClientConfig) *Client {
+func NewClient(config *ClientConfig) (*Client, error) {
 	if config.ServerAddr == "" {
-		panic("missing ServerAddr")
+		return nil, errors.New("missing ServerAddr")
 	}
 	if config.TLSClientConfig == nil {
-		panic("missing TLSClientConfig")
+		return nil, errors.New("missing TLSClientConfig")
 	}
-	if config.Tunnels == nil || len(config.Tunnels) == 0 {
-		panic("missing Tunnels")
+	if len(config.Tunnels) == 0 {
+		return nil, errors.New("missing Tunnels")
 	}
 	if config.Proxy == nil {
-		panic("missing Proxy")
+		return nil, errors.New("missing Proxy")
 	}
 
 	logger := config.Logger
@@ -82,7 +83,7 @@ func NewClient(config *ClientConfig) *Client {
 		logger:     logger,
 	}
 
-	return c
+	return c, nil
 }
 
 // Start connects client to the server, it returns error if there is a

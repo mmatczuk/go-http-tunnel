@@ -51,7 +51,7 @@ func echoHTTP(t testing.TB, l net.Listener) {
 		if r.Body != nil {
 			body, err := ioutil.ReadAll(r.Body)
 			if err != nil {
-				panic(err)
+				t.Fatal(err)
 			}
 			w.Write(body)
 		}
@@ -132,7 +132,7 @@ func makeTunnelClient(t testing.TB, serverAddr string, httpLocalAddr, httpAddr, 
 	}
 
 	cert, _ := selfSignedCert()
-	c := tunnel.NewClient(&tunnel.ClientConfig{
+	c, err := tunnel.NewClient(&tunnel.ClientConfig{
 		ServerAddr:      serverAddr,
 		TLSClientConfig: tlsConfig(cert),
 		Tunnels:         tunnels,
@@ -142,7 +142,14 @@ func makeTunnelClient(t testing.TB, serverAddr string, httpLocalAddr, httpAddr, 
 		}),
 		Logger: log.NewStdLogger(),
 	})
-	go c.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		if err := c.Start(); err != nil {
+			t.Log(err)
+		}
+	}()
 
 	return c
 }

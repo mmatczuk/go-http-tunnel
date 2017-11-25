@@ -31,10 +31,6 @@ type TCPProxy struct {
 // NewTCPProxy creates new direct TCPProxy, everything will be proxied to
 // localAddr.
 func NewTCPProxy(localAddr string, logger log.Logger) *TCPProxy {
-	if localAddr == "" {
-		panic("missing localAddr")
-	}
-
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -48,10 +44,6 @@ func NewTCPProxy(localAddr string, logger log.Logger) *TCPProxy {
 // NewMultiTCPProxy creates a new dispatching TCPProxy, connections may go to
 // different backends based on localAddrMap.
 func NewMultiTCPProxy(localAddrMap map[string]string, logger log.Logger) *TCPProxy {
-	if localAddrMap == nil {
-		panic("missing localAddrMap")
-	}
-
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -117,7 +109,7 @@ func (p *TCPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage
 }
 
 func (p *TCPProxy) localAddrFor(hostPort string) string {
-	if p.localAddrMap == nil {
+	if len(p.localAddrMap) == 0 {
 		return p.localAddr
 	}
 
