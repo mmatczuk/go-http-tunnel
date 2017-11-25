@@ -66,11 +66,10 @@ Run server:
 * Install `tunneld` binary
 * Make `.tunneld` directory
 * Copy `server.key`, `server.crt` to `.tunneld`
-* Get client identifier (`tunnel -config ./tunnel/tunnel.yml id`), identifier should look like this `YMBKT3V-ESUTZ2Z-7MRILIJ-T35FHGO-D2DHO7D-FXMGSSR-V4LBSZX-BNDONQ4`
 * Start tunnel server
 
 ```bash
-$ tunneld -tlsCrt .tunneld/server.crt -tlsKey .tunneld/server.key -clients YMBKT3V-ESUTZ2Z-7MRILIJ-T35FHGO-D2DHO7D-FXMGSSR-V4LBSZX-BNDONQ4
+$ tunneld -tlsCrt .tunneld/server.crt -tlsKey .tunneld/server.key
 ```
 
 This will run HTTP server on port `80` and HTTPS (HTTP/2) server on port `443`. If you want to use HTTPS it's recommended to get a properly signed certificate to avoid security warnings.
