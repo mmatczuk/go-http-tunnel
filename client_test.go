@@ -23,7 +23,7 @@ func TestClient_Dial(t *testing.T) {
 	s := httptest.NewTLSServer(nil)
 	defer s.Close()
 
-	c := NewClient(&ClientConfig{
+	c, err := NewClient(&ClientConfig{
 		ServerAddr: s.Listener.Addr().String(),
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: true,
@@ -31,6 +31,9 @@ func TestClient_Dial(t *testing.T) {
 		Tunnels: map[string]*proto.Tunnel{"test": {}},
 		Proxy:   Proxy(ProxyFuncs{}),
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	conn, err := c.dial()
 	if err != nil {
@@ -58,7 +61,7 @@ func TestClient_DialBackoff(t *testing.T) {
 		return nil, errors.New("foobar")
 	}
 
-	c := NewClient(&ClientConfig{
+	c, err := NewClient(&ClientConfig{
 		ServerAddr:      "8.8.8.8",
 		TLSClientConfig: &tls.Config{},
 		DialTLS:         d,
@@ -66,12 +69,14 @@ func TestClient_DialBackoff(t *testing.T) {
 		Tunnels:         map[string]*proto.Tunnel{"test": {}},
 		Proxy:           Proxy(ProxyFuncs{}),
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	start := time.Now()
-	_, err := c.dial()
-	end := time.Now()
+	_, err = c.dial()
 
-	if end.Sub(start) < 100*time.Millisecond {
+	if time.Since(start) < 100*time.Millisecond {
 		t.Fatal("Wait mismatch", err)
 	}
 

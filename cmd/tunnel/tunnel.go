@@ -90,11 +90,11 @@ func main() {
 
 	b, err := yaml.Marshal(config)
 	if err != nil {
-		fatal("failed to load config: %s", err)
+		fatal("failed to dump config: %s", err)
 	}
 	logger.Log("config", string(b))
 
-	client := tunnel.NewClient(&tunnel.ClientConfig{
+	client, err := tunnel.NewClient(&tunnel.ClientConfig{
 		ServerAddr:      config.ServerAddr,
 		TLSClientConfig: tlsconf,
 		Backoff:         expBackoff(config.Backoff),
@@ -102,9 +102,12 @@ func main() {
 		Proxy:           proxy(config.Tunnels, logger),
 		Logger:          logger,
 	})
+	if err != nil {
+		fatal("failed to create client: %s", err)
+	}
 
 	if err := client.Start(); err != nil {
-		fatal("%s", err)
+		fatal("failed to start tunnels: %s", err)
 	}
 }
 
