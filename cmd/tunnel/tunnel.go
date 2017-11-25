@@ -83,6 +83,10 @@ func main() {
 		config.Tunnels = tunnels
 	}
 
+	if len(config.Tunnels) == 0 {
+		fatal("no tunnels")
+	}
+
 	tlsconf, err := tlsConfig(config)
 	if err != nil {
 		fatal("failed to configure tls: %s", err)
