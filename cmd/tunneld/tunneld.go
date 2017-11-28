@@ -28,6 +28,8 @@ func main() {
 		return
 	}
 
+	fmt.Fprintln(os.Stderr, banner)
+
 	logger := log.NewFilterLogger(log.NewStdLogger(), opts.logLevel)
 
 	tlsconf, err := tlsConfig(opts)
