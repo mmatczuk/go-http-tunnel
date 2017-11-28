@@ -141,7 +141,7 @@ func tlsConfig(config *ClientConfig) (*tls.Config, error) {
 	return &tls.Config{
 		ServerName:         host,
 		Certificates:       []tls.Certificate{cert},
-		InsecureSkipVerify: config.InsecureSkipVerify,
+		InsecureSkipVerify: roots == nil,
 		RootCAs:            roots,
 	}, nil
 }
