@@ -149,7 +149,7 @@ func (s *Server) Start() {
 
 			s.logger.Log(
 				"level", 0,
-				"msg", "accept control connection failed",
+				"msg", "accept of control connection failed",
 				"addr", addr,
 				"err", err,
 			)
@@ -158,8 +158,8 @@ func (s *Server) Start() {
 
 		if err := keepAlive(conn); err != nil {
 			s.logger.Log(
-				"level", 1,
-				"msg", "could not enable TCP keepalive for control connection",
+				"level", 0,
+				"msg", "TCP keepalive for control connection failed",
 				"addr", addr,
 				"err", err,
 			)
@@ -440,19 +440,9 @@ func (s *Server) listen(l net.Listener, identifier id.ID) {
 				return
 			}
 
-			if err = keepAlive(conn); err != nil {
-				s.logger.Log(
-					"level", 1,
-					"msg", "could not enable TCP keepalive for tunnel connection",
-					"identifier", identifier,
-					"addr", addr,
-					"err", err,
-				)
-			}
-
 			s.logger.Log(
 				"level", 0,
-				"msg", "accept connection failed",
+				"msg", "accept of connection failed",
 				"identifier", identifier,
 				"addr", addr,
 				"err", err,
@@ -465,6 +455,17 @@ func (s *Server) listen(l net.Listener, identifier id.ID) {
 			ForwardedHost:  l.Addr().String(),
 			ForwardedProto: l.Addr().Network(),
 		}
+
+		if err := keepAlive(conn); err != nil {
+			s.logger.Log(
+				"level", 1,
+				"msg", "TCP keepalive for tunneled connection failed",
+				"identifier", identifier,
+				"ctrlMsg", msg,
+				"err", err,
+			)
+		}
+
 		go func() {
 			if err := s.proxyConn(identifier, conn, msg); err != nil {
 				s.logger.Log(
