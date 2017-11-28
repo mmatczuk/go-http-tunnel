@@ -4,12 +4,11 @@ Go HTTP tunnel is a reverse tunnel based on HTTP/2. It enables you to share your
 
 Features:
 
-* HTTP proxy
-* HTTP [basic authentication](https://en.wikipedia.org/wiki/Basic_access_authentication)
+* HTTP proxy with [basic authentication](https://en.wikipedia.org/wiki/Basic_access_authentication)
 * TCP proxy
-* Auto reconnect using backoff strategy
-* Dynamic client management and eviction
-* Go `http.Handler` and `http.RoundTripper` implementations
+* Client auto reconnect
+* Client management and eviction
+* Easy to use CLI
 
 Common use cases:
 
