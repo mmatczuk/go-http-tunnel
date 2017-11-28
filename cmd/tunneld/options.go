@@ -44,7 +44,6 @@ type options struct {
 	tlsKey     string
 	rootCA     string
 	clients    string
-	logTo      string
 	logLevel   int
 	version    bool
 }
@@ -57,7 +56,6 @@ func parseArgs() *options {
 	tlsKey := flag.String("tlsKey", "server.key", "Path to a TLS key file")
 	rootCA := flag.String("rootCA", "", "Path to the trusted certificate chian used for client certificate authentication, if empty do not authenticate clients")
 	clients := flag.String("clients", "", "Comma-separated list of tunnel client ids, if empty accept all clients")
-	logTo := flag.String("log", "stdout", "Write log messages to this file, file name or 'stdout', 'stderr', 'none'")
 	logLevel := flag.Int("log-level", 1, "Level of messages to log, 0-3")
 	version := flag.Bool("version", false, "Prints tunneld version")
 	flag.Parse()
@@ -70,7 +68,6 @@ func parseArgs() *options {
 		tlsKey:     *tlsKey,
 		rootCA:     *rootCA,
 		clients:    *clients,
-		logTo:      *logTo,
 		logLevel:   *logLevel,
 		version:    *version,
 	}

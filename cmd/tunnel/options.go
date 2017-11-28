@@ -23,7 +23,7 @@ Commands:
 
 Examples:
 	tunnel start www ssh
-	tunnel -config config.yaml -log stdout -log-level 2 start ssh
+	tunnel -config config.yaml -log-level 2 start ssh
 	tunnel start-all
 
 config.yaml:
@@ -56,7 +56,6 @@ func init() {
 
 type options struct {
 	config   string
-	logTo    string
 	logLevel int
 	version  bool
 	command  string
@@ -65,14 +64,12 @@ type options struct {
 
 func parseArgs() (*options, error) {
 	config := flag.String("config", "tunnel.yml", "Path to tunnel configuration file")
-	logTo := flag.String("log", "stdout", "Write log messages to this file, file name or 'stdout', 'stderr', 'none'")
 	logLevel := flag.Int("log-level", 1, "Level of messages to log, 0-3")
 	version := flag.Bool("version", false, "Prints tunnel version")
 	flag.Parse()
 
 	opts := &options{
 		config:   *config,
-		logTo:    *logTo,
 		logLevel: *logLevel,
 		version:  *version,
 		command:  flag.Arg(0),
