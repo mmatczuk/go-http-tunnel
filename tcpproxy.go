@@ -91,10 +91,10 @@ func (p *TCPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage
 	}
 	defer local.Close()
 
-	if err = keepAlive(local); err != nil {
+	if err := keepAlive(local); err != nil {
 		p.logger.Log(
-			"level", 0,
-			"msg", "could not enable TCP keepalive for local tunnel connection",
+			"level", 1,
+			"msg", "TCP keepalive for tunneled connection failed",
 			"target", target,
 			"ctrlMsg", msg,
 			"err", err,
