@@ -440,6 +440,16 @@ func (s *Server) listen(l net.Listener, identifier id.ID) {
 				return
 			}
 
+			if err = keepAlive(conn); err != nil {
+				s.logger.Log(
+					"level", 1,
+					"msg", "could not enable TCP keepalive for tunnel connection",
+					"identifier", identifier,
+					"addr", addr,
+					"err", err,
+				)
+			}
+
 			s.logger.Log(
 				"level", 0,
 				"msg", "accept connection failed",
