@@ -28,7 +28,6 @@ Examples:
 
 config.yaml:
 	server_addr: SERVER_IP:5223
-	insecure_skip_verify: true
 	tunnels:
 	  webui:
 	    proto: http

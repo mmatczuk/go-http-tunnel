@@ -80,7 +80,6 @@ looks like this
 
 ```yaml
     server_addr: SERVER_IP:5223
-    insecure_skip_verify: true
     tunnels:
       webui:
         proto: http
@@ -96,7 +95,6 @@ looks like this
 Configuration options:
 
 * `server_addr`: server TCP address, i.e. `54.12.12.45:5223`
-* `insecure_skip_verify`: controls whether a client should skip the verification of the server's certificate chain and host name. If set to `true` the client will accept *any* server certificate as valid, *default:* `false`
 * `tls_crt`: path to client TLS certificate, *default:* `client.crt` *in the config file directory*
 * `tls_key`: path to client TLS certificate key, *default:* `client.key` *in the config file directory*
 * `root_ca`: path to trusted root certificate authority pool file, *default* is the host's root CA set
