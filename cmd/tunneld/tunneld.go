@@ -28,10 +28,7 @@ func main() {
 		return
 	}
 
-	logger, err := log.NewLogger(opts.logTo, opts.logLevel)
-	if err != nil {
-		fatal("failed to init logger: %s", err)
-	}
+	logger := log.NewFilterLogger(log.NewStdLogger(), opts.logLevel)
 
 	tlsconf, err := tlsConfig(opts)
 	if err != nil {
