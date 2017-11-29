@@ -97,7 +97,7 @@ Configuration options:
 * `server_addr`: server TCP address, i.e. `54.12.12.45:5223`
 * `tls_crt`: path to client TLS certificate, *default:* `client.crt` *in the config file directory*
 * `tls_key`: path to client TLS certificate key, *default:* `client.key` *in the config file directory*
-* `root_ca`: path to trusted root certificate authority pool file, *default* is the host's root CA set
+* `root_ca`: path to trusted root certificate authority pool file, if empty any server certificate is accepted
 *  `tunnels / [name]`
     * `proto`: tunnel protocol, `http` or `tcp`
     * `addr`: forward traffic to this local port number or network address, for `proto=http` this can be full URL i.e. `https://machine/sub/path/?plus=params`, supports URL schemes `http` and `https`
