@@ -77,7 +77,7 @@ get-tools:
 #.PHONY: build
 #build:
 #	mkdir ${OUTPUT_DIR}
-#	CGO_ENABLED=0 GOARM=5 gox -ldflags "-X main.version=$(GIT_COMMIT)" \
+#	CGO_ENABLED=0 GOARM=5 gox -ldflags "-w -X main.version=$(GIT_COMMIT)" \
 #	-os=${OS} -arch=${ARCH} -osarch=${OSARCH} -output "${OUTPUT_DIR}/pkg/{{.OS}}_{{.Arch}}/{{.Dir}}" \
 #	./cmd/tunnel ./cmd/tunneld
 #
