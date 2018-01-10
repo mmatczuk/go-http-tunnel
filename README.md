@@ -111,9 +111,10 @@ Configuration options:
     * `max_time`: maximal time client would try to reconnect to the server if connection was lost, set `0` to never stop trying, *default:* `15m`
 
 ## How it works
-Client opens a TLS connection to a server. Server accepts connections from known clients only, client is recognised by it's TLS certificate ID. The server is publicly available and proxies incoming connections to the client. Then the connection is further proxied in the client's network. 
 
-Tunnel is based HTTP/2 for speed and security. There is a single TCP connection between client and server and all the proxied connections are multiplexed using HTTP/2.
+A client opens TLS connection to a server. The server accepts connections from known clients only. The client is recognized by its TLS certificate ID. The server is publicly available and proxies incoming connections to the client. Then the connection is further proxied in the client's network.
+
+The tunnel is based HTTP/2 for speed and security. There is a single TCP connection between client and server and all the proxied connections are multiplexed using HTTP/2.
 
 ## Donation
 
