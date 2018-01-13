@@ -48,3 +48,7 @@
 [[constraint]]
   branch = "master"
   name = "github.com/felixge/tcpkeepalive"
+
+[[constraint]]
+  branch = "master"
+  name = "golang.org/x/crypto"
