@@ -11,8 +11,10 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/net/http2"
 
 	"github.com/mmatczuk/go-http-tunnel"
@@ -65,7 +67,7 @@ func main() {
 	}
 
 	// start HTTP
-	if opts.httpAddr != "" {
+	if opts.httpAddr != "" && !opts.letsEncrypt {
 		go func() {
 			logger.Log(
 				"level", 1,
@@ -78,7 +80,7 @@ func main() {
 	}
 
 	// start HTTPS
-	if opts.httpsAddr != "" {
+	if opts.httpsAddr != "" && !opts.letsEncrypt {
 		go func() {
 			logger.Log(
 				"level", 1,
@@ -95,7 +97,9 @@ func main() {
 			fatal("failed to start HTTPS: %s", s.ListenAndServeTLS(opts.tlsCrt, opts.tlsKey))
 		}()
 	}
-
+	if opts.letsEncrypt {
+		go startAutocert(opts, server, logger)
+	}
 	server.Start()
 }
 
@@ -137,4 +141,32 @@ func fatal(format string, a ...interface{}) {
 	fmt.Fprintf(os.Stderr, format, a...)
 	fmt.Fprint(os.Stderr, "\n")
 	os.Exit(1)
+}
+
+func startAutocert(opts *options, server *tunnel.Server, logger log.Logger) {
+	cacheDir := filepath.Join(os.Getenv("HOME"), ".cache", "autocerts")
+	m := &autocert.Manager{
+		Prompt:     autocert.AcceptTOS,
+		HostPolicy: autocert.HostWhitelist(strings.Split(opts.secureHosts, ",")...),
+		Cache:      autocert.DirCache(cacheDir),
+	}
+	s := &http.Server{
+		Addr:    ":https",
+		Handler: server,
+	}
+	s.TLSConfig = &tls.Config{
+		GetCertificate: m.GetCertificate,
+	}
+	http2.ConfigureServer(s, nil)
+	logger.Log(
+		"level", 1,
+		"action", "start http,https with lets encrypt support",
+		"addr", "80,443",
+	)
+	go func() {
+		fatal("failed to start HTTP: %s", http.ListenAndServe(":http", m.HTTPHandler(server)))
+	}()
+	go func() {
+		fatal("failed to start HTTPS: %s", s.ListenAndServeTLS("", ""))
+	}()
 }
