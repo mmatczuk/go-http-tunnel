@@ -5,10 +5,12 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -144,14 +146,17 @@ func fatal(format string, a ...interface{}) {
 }
 
 func startAutocert(opts *options, server *tunnel.Server, logger log.Logger) {
-	cacheDir := filepath.Join(os.Getenv("HOME"), ".cache", "autocerts")
+	cacheDir := cacheDir(opts.letsEncryptCacheDir)
 	m := &autocert.Manager{
 		Prompt:     autocert.AcceptTOS,
-		HostPolicy: autocert.HostWhitelist(strings.Split(opts.secureHosts, ",")...),
+		HostPolicy: hostPolicy(server),
 		Cache:      autocert.DirCache(cacheDir),
 	}
+	// Allow to bind to a specific host ignoring ports.
+	httpAddr := fmt.Sprintf("%s:80", trimPort(opts.httpsAddr))
+	httpsAddr := fmt.Sprintf("%s:443", trimPort(opts.httpsAddr))
 	s := &http.Server{
-		Addr:    ":https",
+		Addr:    httpsAddr,
 		Handler: server,
 	}
 	s.TLSConfig = &tls.Config{
@@ -164,9 +169,36 @@ func startAutocert(opts *options, server *tunnel.Server, logger log.Logger) {
 		"addr", "80,443",
 	)
 	go func() {
-		fatal("failed to start HTTP: %s", http.ListenAndServe(":http", m.HTTPHandler(server)))
+		fatal("failed to start HTTP: %s", http.ListenAndServe(httpAddr, m.HTTPHandler(server)))
 	}()
 	go func() {
 		fatal("failed to start HTTPS: %s", s.ListenAndServeTLS("", ""))
 	}()
+}
+
+func hostPolicy(server *tunnel.Server) autocert.HostPolicy {
+	return func(_ context.Context, host string) error {
+		_, _, subscribed := server.Subscriber(host)
+		if !subscribed {
+			return fmt.Errorf("acme/autocert: host `%s` not subscribed", host)
+		}
+		return nil
+	}
+}
+
+func trimPort(hostPort string) (host string) {
+	host, _, _ = net.SplitHostPort(hostPort)
+	if host == "" {
+		host = hostPort
+	}
+	return
+}
+
+func cacheDir(letsEncryptCacheDir string) string {
+	const certs = "autocerts"
+	filepath.Join(os.Getenv("HOME"), ".cache", certs)
+	if letsEncryptCacheDir != "" {
+		return filepath.Join(letsEncryptCacheDir, certs)
+	}
+	return filepath.Join(os.Getenv("HOME"), ".cache", certs)
 }

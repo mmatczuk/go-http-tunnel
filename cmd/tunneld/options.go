@@ -37,17 +37,17 @@ func init() {
 
 // options specify arguments read command line arguments.
 type options struct {
-	httpAddr    string
-	httpsAddr   string
-	tunnelAddr  string
-	tlsCrt      string
-	tlsKey      string
-	rootCA      string
-	clients     string
-	logLevel    int
-	version     bool
-	letsEncrypt bool
-	secureHosts string
+	httpAddr            string
+	httpsAddr           string
+	tunnelAddr          string
+	tlsCrt              string
+	tlsKey              string
+	rootCA              string
+	clients             string
+	logLevel            int
+	version             bool
+	letsEncrypt         bool
+	letsEncryptCacheDir string
 }
 
 func parseArgs() *options {
@@ -61,21 +61,21 @@ func parseArgs() *options {
 	logLevel := flag.Int("log-level", 1, "Level of messages to log, 0-3")
 	version := flag.Bool("version", false, "Prints tunneld version")
 	letsEncrypt := flag.Bool("letsEncrypt", false, "Enable let's encrypt")
-	secureHosts := flag.String("secureHosts", "", "Comma-separated list of secure hosts (for Lets Encrypt autocerts)")
+	letsEncryptCacheDir := flag.String("letsEncryptCacheDir", "", "Path to store cached certificates")
 
 	flag.Parse()
 
 	return &options{
-		httpAddr:    *httpAddr,
-		httpsAddr:   *httpsAddr,
-		tunnelAddr:  *tunnelAddr,
-		tlsCrt:      *tlsCrt,
-		tlsKey:      *tlsKey,
-		rootCA:      *rootCA,
-		clients:     *clients,
-		logLevel:    *logLevel,
-		version:     *version,
-		letsEncrypt: *letsEncrypt,
-		secureHosts: *secureHosts,
+		httpAddr:            *httpAddr,
+		httpsAddr:           *httpsAddr,
+		tunnelAddr:          *tunnelAddr,
+		tlsCrt:              *tlsCrt,
+		tlsKey:              *tlsKey,
+		rootCA:              *rootCA,
+		clients:             *clients,
+		logLevel:            *logLevel,
+		version:             *version,
+		letsEncrypt:         *letsEncrypt,
+		letsEncryptCacheDir: *letsEncryptCacheDir,
 	}
 }
