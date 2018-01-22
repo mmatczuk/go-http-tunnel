@@ -5,6 +5,7 @@ Go HTTP tunnel is a reverse tunnel based on HTTP/2. It enables you to share your
 Features:
 
 * HTTP proxy with [basic authentication](https://en.wikipedia.org/wiki/Basic_access_authentication)
+* HTTPS backed by Let's Encrypt
 * TCP proxy
 * Client auto reconnect
 * Client management and eviction
@@ -65,7 +66,15 @@ Run server:
 $ tunneld -tlsCrt .tunneld/server.crt -tlsKey .tunneld/server.key
 ```
 
-This will run HTTP server on port `80` and HTTPS (HTTP/2) server on port `443`. If you want to use HTTPS it's recommended to get a properly signed certificate to avoid security warnings.
+This will run HTTP server on port `80` and HTTPS (HTTP/2) server on port `443`.
+
+Run server with Let's Encrypt enabled:
+
+```bash
+$ tunneld -tlsCrt .tunneld/server.crt -tlsKey .tunneld/server.key -letsEncrypt
+```
+
+This will enable HTTPS and automatically requests certificates from Let's Encrypt to all subscribed clients. HTTPS traffic will be enforced.
 
 ## Configuration
 

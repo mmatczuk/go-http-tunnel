@@ -13,7 +13,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/user"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"golang.org/x/crypto/acme/autocert"
@@ -22,6 +24,10 @@ import (
 	"github.com/mmatczuk/go-http-tunnel"
 	"github.com/mmatczuk/go-http-tunnel/id"
 	"github.com/mmatczuk/go-http-tunnel/log"
+)
+
+var (
+	hostnameRegex = regexp.MustCompile(`^[[:alnum:]_][[:alnum:]_-]{0,62}(\.[[:alnum:]_]{1}[[:alnum:]_-]{0,62})*[\._]?$`)
 )
 
 func main() {
@@ -146,15 +152,27 @@ func fatal(format string, a ...interface{}) {
 }
 
 func startAutocert(opts *options, server *tunnel.Server, logger log.Logger) {
-	cacheDir := cacheDir(opts.letsEncryptCacheDir)
+	cacheDir, err := cacheDir(opts.letsEncryptCacheDir)
+	if err != nil {
+		fatal("failed to set cache directory for certs ", err)
+	}
 	m := &autocert.Manager{
 		Prompt:     autocert.AcceptTOS,
 		HostPolicy: hostPolicy(server),
 		Cache:      autocert.DirCache(cacheDir),
 	}
-	// Allow to bind to a specific host ignoring ports.
-	httpAddr := fmt.Sprintf("%s:80", trimPort(opts.httpsAddr))
-	httpsAddr := fmt.Sprintf("%s:443", trimPort(opts.httpsAddr))
+	if opts.httpAddr == ":80" {
+		opts.httpAddr = ""
+	}
+	if opts.httpsAddr == ":443" {
+		opts.httpAddr = ""
+	}
+	// Allow binding to a specific host
+	if !validAddr(opts.httpAddr) || !validAddr(opts.httpAddr) {
+		fatal("invalid  http(s) address, port not allowed with Let's Encrypt enabled")
+	}
+	httpAddr := net.JoinHostPort(opts.httpAddr, "80")
+	httpsAddr := net.JoinHostPort(opts.httpAddr, "443")
 	s := &http.Server{
 		Addr:    httpsAddr,
 		Handler: server,
@@ -165,11 +183,11 @@ func startAutocert(opts *options, server *tunnel.Server, logger log.Logger) {
 	http2.ConfigureServer(s, nil)
 	logger.Log(
 		"level", 1,
-		"action", "start http,https with lets encrypt support",
+		"action", "start https with Let's Encrypt support",
 		"addr", "80,443",
 	)
 	go func() {
-		fatal("failed to start HTTP: %s", http.ListenAndServe(httpAddr, m.HTTPHandler(server)))
+		fatal("failed to start HTTP: %s", http.ListenAndServe(httpAddr, m.HTTPHandler(http.HandlerFunc(redirect))))
 	}()
 	go func() {
 		fatal("failed to start HTTPS: %s", s.ListenAndServeTLS("", ""))
@@ -186,19 +204,33 @@ func hostPolicy(server *tunnel.Server) autocert.HostPolicy {
 	}
 }
 
-func trimPort(hostPort string) (host string) {
-	host, _, _ = net.SplitHostPort(hostPort)
-	if host == "" {
-		host = hostPort
+// validAddr checks that addrs doesn't contains a port already
+func validAddr(addr string) bool {
+	if ip := net.ParseIP(addr); ip != nil {
+		return true
 	}
-	return
+	if hostnameRegex.MatchString(addr) {
+		return true
+	}
+	if addr == "" {
+		return true
+	}
+	return false
 }
 
-func cacheDir(letsEncryptCacheDir string) string {
-	const certs = "autocerts"
-	filepath.Join(os.Getenv("HOME"), ".cache", certs)
+func cacheDir(letsEncryptCacheDir string) (string, error) {
 	if letsEncryptCacheDir != "" {
-		return filepath.Join(letsEncryptCacheDir, certs)
+		return letsEncryptCacheDir, nil
 	}
-	return filepath.Join(os.Getenv("HOME"), ".cache", certs)
+	user, err := user.Current()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(user.HomeDir, ".tunnel", "certs"), nil
+}
+
+func redirect(w http.ResponseWriter, r *http.Request) {
+	r.URL.Scheme = "https"
+	r.URL.Host = r.Host
+	http.Redirect(w, r, r.URL.String(), http.StatusMovedPermanently)
 }

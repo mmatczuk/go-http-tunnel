@@ -19,6 +19,7 @@ Example:
 	tuneld
 	tuneld -clients YMBKT3V-ESUTZ2Z-7MRILIJ-T35FHGO-D2DHO7D-FXMGSSR-V4LBSZX-BNDONQ4
 	tuneld -httpAddr :8080 -httpsAddr ""
+	tuneld -letsEncrypt -letsEncryptCacheDir /etc/tunneld/certs
 
 Author:
 	Written by M. Matczuk (mmatczuk@gmail.com)
@@ -60,7 +61,7 @@ func parseArgs() *options {
 	clients := flag.String("clients", "", "Comma-separated list of tunnel client ids, if empty accept all clients")
 	logLevel := flag.Int("log-level", 1, "Level of messages to log, 0-3")
 	version := flag.Bool("version", false, "Prints tunneld version")
-	letsEncrypt := flag.Bool("letsEncrypt", false, "Enable let's encrypt")
+	letsEncrypt := flag.Bool("letsEncrypt", false, "Enable Let's Encrypt")
 	letsEncryptCacheDir := flag.String("letsEncryptCacheDir", "", "Path to store cached certificates")
 
 	flag.Parse()
