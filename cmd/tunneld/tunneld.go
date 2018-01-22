@@ -165,14 +165,14 @@ func startAutocert(opts *options, server *tunnel.Server, logger log.Logger) {
 		opts.httpAddr = ""
 	}
 	if opts.httpsAddr == ":443" {
-		opts.httpAddr = ""
+		opts.httpsAddr = ""
 	}
 	// Allow binding to a specific host
-	if !validAddr(opts.httpAddr) || !validAddr(opts.httpAddr) {
+	if !validAddr(opts.httpAddr) || !validAddr(opts.httpsAddr) {
 		fatal("invalid  http(s) address, port not allowed with Let's Encrypt enabled")
 	}
 	httpAddr := net.JoinHostPort(opts.httpAddr, "80")
-	httpsAddr := net.JoinHostPort(opts.httpAddr, "443")
+	httpsAddr := net.JoinHostPort(opts.httpsAddr, "443")
 	s := &http.Server{
 		Addr:    httpsAddr,
 		Handler: server,
