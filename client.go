@@ -43,12 +43,13 @@ type ClientConfig struct {
 	Proxy ProxyFunc
 	// Logger is optional logger. If nil logging is disabled.
 	Logger log.Logger
-	// Name the controller name
+	// Name the controller name.
 	Name string
-	// Description Client Description
+	// Description Client Description.
 	Description string
-	// Registered if client is registered on server
+	// Registered if client is registered on server.
 	Registered bool
+	// Disabled if set to true block this client.
 }
 
 type ClientToServerConn struct {

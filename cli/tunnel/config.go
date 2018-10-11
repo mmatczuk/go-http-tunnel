@@ -33,7 +33,7 @@ type BackoffConfig struct {
 
 // Tunnel defines a tunnel.
 type Tunnel struct {
-	Protocol   string `yaml:"protocol,omitempty"`
+	Protocol   string `yaml:"proto,omitempty"`
 	LocalAddr  string `yaml:"local_addr,omitempty"`
 	Auth       string `yaml:"auth,omitempty"`
 	Host       string `yaml:"host,omitempty"`

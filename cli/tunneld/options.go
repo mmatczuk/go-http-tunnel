@@ -57,7 +57,7 @@ func parseArgs(args ...string) *options {
 	tlsKey := flag.String("tlsKey", "server.key", "Path to a TLS key file")
 	rootCA := flag.String("rootCA", "", "Path to the trusted certificate chian used for client certificate authentication, if empty any client certificate is accepted")
 	clients := flag.String("clients", "", "Comma-separated list of tunnel client ids, if empty accept all clients")
-	clientsDir := flag.String("clientsDir", "", "Directory of registered clients")
+	clientsDir := flag.String("registeredClientsDB", "", "Database directory of registered clients")
 	logLevel := flag.Int("log-level", 1, "Level of messages to log, 0-3")
 	version := flag.Bool("version", false, "Prints tunneld version")
 	flag.CommandLine.Parse(args)

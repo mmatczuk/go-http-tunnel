@@ -12,7 +12,7 @@ type Tunnel struct {
 	Disabled bool
 	// Protocol specifies tunnel protocol, must be one of protocols known
 	// by the server.
-	Protocol string
+	Protocol string `yaml:"proto"`
 	// Host specified HTTP request host, it's required for HTTP and WS
 	// tunnels.
 	Host string

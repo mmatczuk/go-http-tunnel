@@ -79,36 +79,121 @@ Sample configuration that exposes:
 looks like this
 
 ```yaml
-    server_addr: SERVER_IP:5223
-    tunnels:
-      webui:
-        proto: http
-        addr: localhost:8080
-        auth: user:password
-        host: webui.my-tunnel-host.com
-      ssh:
-        proto: tcp
-        addr: 192.168.0.5:22
-        remote_addr: 0.0.0.0:22
+server_addr: SERVER_IP:5223
+tunnels:
+  webui:
+    proto: http
+    local_addr: localhost:8080
+    auth: user:password
+    host: webui.my-tunnel-host.com
+  ssh:
+    proto: tcp
+    local_addr: 192.168.0.5:22
+    remote_addr: 0.0.0.0:22
 ```
 
 Configuration options:
 
+* `name`: set the client name (not required).
+* `description`: set the client name (not required). 
 * `server_addr`: server TCP address, i.e. `54.12.12.45:5223`
 * `tls_crt`: path to client TLS certificate, *default:* `client.crt` *in the config file directory*
 * `tls_key`: path to client TLS certificate key, *default:* `client.key` *in the config file directory*
 * `root_ca`: path to trusted root certificate authority pool file, if empty any server certificate is accepted
 *  `tunnels / [name]`
     * `proto`: tunnel protocol, `http` or `tcp`
-    * `addr`: forward traffic to this local port number or network address, for `proto=http` this can be full URL i.e. `https://machine/sub/path/?plus=params`, supports URL schemes `http` and `https`
+    * `local_addr`: forward traffic to this local port number or network address, for `proto=http` this can be full URL i.e. `https://machine/sub/path/?plus=params`, supports URL schemes `http` and `https`
     * `auth`: (`proto=http`) (optional) basic authentication credentials to enforce on tunneled requests, format `user:password`
     * `host`: (`proto=http`) hostname to request (requires reserved name and DNS CNAME)
     * `remote_addr`: (`proto=tcp`) bind the remote TCP address
+    * `disabled`: if set to `true` this tunnel has be ignored.
 * `backoff`
     * `interval`: how long client would wait before redialing the server if connection was lost, exponential backoff initial interval, *default:* `500ms`
     * `multiplier`: interval multiplier if reconnect failed, *default:* `1.5`
     * `max_interval`: maximal time client would wait before redialing the server, *default:* `1m`
     * `max_time`: maximal time client would try to reconnect to the server if connection was lost, set `0` to never stop trying, *default:* `15m`
+
+## Client Registration
+
+### Client
+
+Configuration file `tunnel.yaml`:
+
+```yaml
+registered: true
+server_addr: SERVER_IP:5223
+tunnels:
+  webui:
+    proto: http
+    local_addr: localhost:8080
+    auth: user:password
+  ssh:
+    proto: tcp
+    local_addr: 192.168.0.5:22
+```
+
+Configuration options:
+
+* `registered`: registered client. Set as `true`.
+* `server_addr`: server TCP address, i.e. `54.12.12.45:5223`
+* `tls_crt`: path to client TLS certificate, *default:* `client.crt` *in the config file directory*
+* `tls_key`: path to client TLS certificate key, *default:* `client.key` *in the config file directory*
+* `root_ca`: path to trusted root certificate authority pool file, if empty any server certificate is accepted
+*  `tunnels / [name]`
+    * `proto`: tunnel protocol, `http` or `tcp`
+    * `local_addr`: forward traffic to this local port number or network address, for `proto=http` this can be full URL i.e. `https://machine/sub/path/?plus=params`, supports URL schemes `http` and `https`
+    * `auth`: (`proto=http`) (optional) basic authentication credentials to enforce on tunneled requests, format `user:password`
+    * `disabled`: if set to `true` this tunnel has be ignored.
+* `backoff`
+    * `interval`: how long client would wait before redialing the server if connection was lost, exponential backoff initial interval, *default:* `500ms`
+    * `multiplier`: interval multiplier if reconnect failed, *default:* `1.5`
+    * `max_interval`: maximal time client would wait before redialing the server, *default:* `1m`
+    * `max_time`: maximal time client would try to reconnect to the server if connection was lost, set `0` to never stop trying, *default:* `15m`
+
+### Server
+
+Create registered clients database structure if not exists:
+
+```bash
+$ mkdir registered_clients
+```
+
+On client, get ID: `$ tunnel id`
+
+Configure client (file `registered_clients/CLIENT_ID.yaml`).
+Example `registered_clients/SS2KPSV-5KG2URM-WYUEDLY-FBDAD7A-MUUVTDX-TL7KL45-2PQEQAD-IN4LVAH.yaml`:
+
+```yaml
+connections: 4
+tunnels:
+  webui:
+    proto: http
+    host: mps.dea.ufv.br
+  ssh:
+    proto: tcp
+    remote_addr: 127.0.0.1:2222
+```
+
+Configuration options:
+* `disabled`: if set to `true` block this client.
+* `connections`: number of connections in addition to the main connection. Default is `0`.
+*  `tunnels / [name]`
+    * `proto`: tunnel protocol, `http` or `tcp`
+    * `host`: (`proto=http`) hostname to request (requires reserved name and DNS CNAME)
+    * `remote_addr`: (`proto=tcp`) bind the remote TCP address
+    * `disabled`: if set to `true` this tunnel has be ignored.
+
+### Run
+
+Server:
+```bash
+$ tunneld -registeredClientsDB registered_clients
+```
+
+Client:
+```bash
+$ tunnel start-all
+```
 
 ## How it works
 
