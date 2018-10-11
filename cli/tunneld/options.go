@@ -2,7 +2,7 @@
 // Use of this source code is governed by an AGPL-style
 // license that can be found in the LICENSE file.
 
-package main
+package tunneld
 
 import (
 	"flag"
@@ -44,11 +44,12 @@ type options struct {
 	tlsKey     string
 	rootCA     string
 	clients    string
+	clientsDir string
 	logLevel   int
 	version    bool
 }
 
-func parseArgs() *options {
+func parseArgs(args ...string) *options {
 	httpAddr := flag.String("httpAddr", ":80", "Public address for HTTP connections, empty string to disable")
 	httpsAddr := flag.String("httpsAddr", ":443", "Public address listening for HTTPS connections, emptry string to disable")
 	tunnelAddr := flag.String("tunnelAddr", ":5223", "Public address listening for tunnel client")
@@ -56,9 +57,10 @@ func parseArgs() *options {
 	tlsKey := flag.String("tlsKey", "server.key", "Path to a TLS key file")
 	rootCA := flag.String("rootCA", "", "Path to the trusted certificate chian used for client certificate authentication, if empty any client certificate is accepted")
 	clients := flag.String("clients", "", "Comma-separated list of tunnel client ids, if empty accept all clients")
+	clientsDir := flag.String("clientsDir", "", "Directory of registered clients")
 	logLevel := flag.Int("log-level", 1, "Level of messages to log, 0-3")
 	version := flag.Bool("version", false, "Prints tunneld version")
-	flag.Parse()
+	flag.CommandLine.Parse(args)
 
 	return &options{
 		httpAddr:   *httpAddr,
@@ -68,6 +70,7 @@ func parseArgs() *options {
 		tlsKey:     *tlsKey,
 		rootCA:     *rootCA,
 		clients:    *clients,
+		clientsDir: *clientsDir,
 		logLevel:   *logLevel,
 		version:    *version,
 	}

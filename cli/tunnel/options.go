@@ -2,7 +2,7 @@
 // Use of this source code is governed by an AGPL-style
 // license that can be found in the LICENSE file.
 
-package main
+package tunnel
 
 import (
 	"flag"
@@ -26,18 +26,30 @@ Examples:
 	tunnel -config config.yaml -log-level 2 start ssh
 	tunnel start-all
 
-config.yaml:
+Normal Client config:
+client.yaml:
 	server_addr: SERVER_IP:5223
 	tunnels:
 	  webui:
 	    proto: http
-	    addr: localhost:8080
+	    local_addr: localhost:8080
 	    auth: user:password
 	    host: webui.my-tunnel-host.com
 	  ssh:
 	    proto: tcp
-	    addr: 192.168.0.5:22
+	    local_addr: 192.168.0.5:22
 	    remote_addr: 0.0.0.0:22
+
+Registered Client config:
+registered_client.yaml:
+	registered: true
+	server_addr: SERVER_IP:5223
+	tunnels:
+	  webui:
+	    local_addr: localhost:8080
+	    auth: user:password
+	  ssh:
+	    local_addr: 192.168.0.5:22
 
 Author:
 	Written by M. Matczuk (mmatczuk@gmail.com)
@@ -55,24 +67,24 @@ func init() {
 }
 
 type options struct {
-	config   string
-	logLevel int
-	version  bool
-	command  string
-	args     []string
+	config     string
+	logLevel   int
+	version    bool
+	command    string
+	args       []string
 }
 
-func parseArgs() (*options, error) {
-	config := flag.String("config", "tunnel.yml", "Path to tunnel configuration file")
+func parseArgs(args ...string) (*options, error) {
+	config := flag.String("config", "tunnel.yaml", "Path to tunnel configuration file")
 	logLevel := flag.Int("log-level", 1, "Level of messages to log, 0-3")
 	version := flag.Bool("version", false, "Prints tunnel version")
-	flag.Parse()
+	flag.CommandLine.Parse(args)
 
 	opts := &options{
-		config:   *config,
-		logLevel: *logLevel,
-		version:  *version,
-		command:  flag.Arg(0),
+		config:     *config,
+		logLevel:   *logLevel,
+		version:    *version,
+		command:    flag.Arg(0),
 	}
 
 	if opts.version {

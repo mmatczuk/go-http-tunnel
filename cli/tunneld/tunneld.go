@@ -2,7 +2,7 @@
 // Use of this source code is governed by an AGPL-style
 // license that can be found in the LICENSE file.
 
-package main
+package tunneld
 
 import (
 	"crypto/tls"
@@ -20,8 +20,12 @@ import (
 	"github.com/mmatczuk/go-http-tunnel/log"
 )
 
-func main() {
-	opts := parseArgs()
+func Main() {
+	MainArgs(os.Args[1:]...)
+}
+
+func MainArgs(args ...string) {
+	opts := parseArgs(args...)
 
 	if opts.version {
 		fmt.Println(version)
@@ -37,7 +41,12 @@ func main() {
 		fatal("failed to configure tls: %s", err)
 	}
 
-	autoSubscribe := opts.clients == ""
+	autoSubscribe := opts.clients == "" && opts.clientsDir == ""
+
+	var clientsProvider tunnel.RegisteredClientsProvider
+	if opts.clientsDir != "" {
+		clientsProvider = &tunnel.RegisteredClientsFileSystemProvider{opts.clientsDir}
+	}
 
 	// setup server
 	server, err := tunnel.NewServer(&tunnel.ServerConfig{
@@ -45,22 +54,29 @@ func main() {
 		AutoSubscribe: autoSubscribe,
 		TLSConfig:     tlsconf,
 		Logger:        logger,
+		RegisteredClientsProvider: clientsProvider,
 	})
 	if err != nil {
 		fatal("failed to create server: %s", err)
 	}
 
 	if !autoSubscribe {
-		for _, c := range strings.Split(opts.clients, ",") {
-			if c == "" {
-				fatal("empty client id")
+		if opts.clientsDir != "" {
+			if _, err := os.Stat(opts.clientsDir); err != nil {
+				fatal(err.Error())
 			}
-			identifier := id.ID{}
-			err := identifier.UnmarshalText([]byte(c))
-			if err != nil {
-				fatal("invalid identifier %q: %s", c, err)
+		} else {
+			for _, c := range strings.Split(opts.clients, ",") {
+				if c == "" {
+					fatal("empty client id")
+				}
+				identifier := id.ID{}
+				err := identifier.UnmarshalText([]byte(c))
+				if err != nil {
+					fatal("invalid identifier %q: %s", c, err)
+				}
+				server.Subscribe(identifier)
 			}
-			server.Subscribe(identifier)
 		}
 	}
 

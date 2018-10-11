@@ -9,24 +9,32 @@ import (
 	"net"
 	"sync"
 
+	"github.com/mmatczuk/go-http-tunnel/proto"
+
 	"github.com/mmatczuk/go-http-tunnel/id"
 	"github.com/mmatczuk/go-http-tunnel/log"
 )
 
+type Listener struct {
+	net.Listener
+	Tunnel *proto.Tunnel
+}
+
 // RegistryItem holds information about hosts and listeners associated with a
-// client.
+// controller.
 type RegistryItem struct {
 	Hosts     []*HostAuth
-	Listeners []net.Listener
+	Listeners []*Listener
 }
 
 // HostAuth holds host and authentication info.
 type HostAuth struct {
-	Host string
-	Auth *Auth
+	Tunnel *proto.Tunnel
+	Auth   *Auth
 }
 
 type hostInfo struct {
+	tunnel     *proto.Tunnel
 	identifier id.ID
 	auth       *Auth
 }
@@ -52,7 +60,7 @@ func newRegistry(logger log.Logger) *registry {
 
 var voidRegistryItem = &RegistryItem{}
 
-// Subscribe allows to connect client with a given identifier.
+// Subscribe allows to connect controller with a given identifier.
 func (r *registry) Subscribe(identifier id.ID) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -70,7 +78,7 @@ func (r *registry) Subscribe(identifier id.ID) {
 	r.items[identifier] = voidRegistryItem
 }
 
-// IsSubscribed returns true if client is subscribed.
+// IsSubscribed returns true if controller is subscribed.
 func (r *registry) IsSubscribed(identifier id.ID) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -78,8 +86,8 @@ func (r *registry) IsSubscribed(identifier id.ID) bool {
 	return ok
 }
 
-// Subscriber returns client identifier assigned to given host.
-func (r *registry) Subscriber(hostPort string) (id.ID, *Auth, bool) {
+// Subscriber returns controller identifier assigned to given host.
+func (r *registry) Subscriber(hostPort string) (id.ID, *hostInfo, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -88,10 +96,10 @@ func (r *registry) Subscriber(hostPort string) (id.ID, *Auth, bool) {
 		return id.ID{}, nil, false
 	}
 
-	return h.identifier, h.auth, ok
+	return h.identifier, h, ok
 }
 
-// Unsubscribe removes client from registry and returns it's RegistryItem.
+// Unsubscribe removes controller from registry and returns it's RegistryItem.
 func (r *registry) Unsubscribe(identifier id.ID) *RegistryItem {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -109,7 +117,7 @@ func (r *registry) Unsubscribe(identifier id.ID) *RegistryItem {
 
 	if i.Hosts != nil {
 		for _, h := range i.Hosts {
-			delete(r.hosts, h.Host)
+			delete(r.hosts, h.Tunnel.Host)
 		}
 	}
 
@@ -141,13 +149,14 @@ func (r *registry) set(i *RegistryItem, identifier id.ID) error {
 			if h.Auth != nil && h.Auth.User == "" {
 				return fmt.Errorf("missing auth user")
 			}
-			if _, ok := r.hosts[trimPort(h.Host)]; ok {
-				return fmt.Errorf("host %q is occupied", h.Host)
+			if _, ok := r.hosts[trimPort(h.Tunnel.Host)]; ok {
+				return fmt.Errorf("host %q is occupied", h.Tunnel.Host)
 			}
 		}
 
 		for _, h := range i.Hosts {
-			r.hosts[trimPort(h.Host)] = &hostInfo{
+			r.hosts[trimPort(h.Tunnel.Host)] = &hostInfo{
+				tunnel:     h.Tunnel,
 				identifier: identifier,
 				auth:       h.Auth,
 			}
@@ -176,7 +185,7 @@ func (r *registry) clear(identifier id.ID) *RegistryItem {
 
 	if i.Hosts != nil {
 		for _, h := range i.Hosts {
-			delete(r.hosts, trimPort(h.Host))
+			delete(r.hosts, trimPort(h.Tunnel.Host))
 		}
 	}
 

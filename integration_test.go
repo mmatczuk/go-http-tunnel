@@ -121,10 +121,11 @@ func makeTunnelClient(t testing.TB, serverAddr string, httpLocalAddr, httpAddr, 
 			Protocol: proto.HTTP,
 			Host:     "localhost",
 			Auth:     "user:password",
+			LocalAddr: httpLocalAddr.String(),
 		},
 		proto.TCP: {
 			Protocol: proto.TCP,
-			Addr:     tcpLocalAddr.String(),
+			LocalAddr:     tcpLocalAddr.String(),
 		},
 	}
 
@@ -165,12 +166,12 @@ func TestIntegration(t *testing.T) {
 	httpLocalAddr := h.Listener.Addr()
 	tcpLocalAddr := freeAddr()
 
-	// client
+	// controller
 	c := makeTunnelClient(t, s.Addr(),
 		httpLocalAddr, http.Addr(),
 		tcpLocalAddr, tcp.Addr(),
 	)
-	// FIXME: replace sleep with client state change watch when ready
+	// FIXME: replace sleep with controller state change watch when ready
 	time.Sleep(500 * time.Millisecond)
 	defer c.Stop()
 

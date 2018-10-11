@@ -13,6 +13,7 @@ import (
 const (
 	HeaderError = "X-Error"
 
+	HeaderLocalAddr      = "X-Local-RemoteAddr"
 	HeaderAction         = "X-Action"
 	HeaderForwardedHost  = "X-Forwarded-Host"
 	HeaderForwardedProto = "X-Forwarded-Proto"
@@ -38,6 +39,7 @@ const (
 // used to inform client about the data and action to take. Based on that client
 // routes requests to backend services.
 type ControlMessage struct {
+	LocalAddr      string
 	Action         string
 	ForwardedHost  string
 	ForwardedProto string
@@ -47,6 +49,7 @@ type ControlMessage struct {
 // ReadControlMessage reads ControlMessage from HTTP headers.
 func ReadControlMessage(r *http.Request) (*ControlMessage, error) {
 	msg := ControlMessage{
+		LocalAddr:      r.Header.Get(HeaderLocalAddr),
 		Action:         r.Header.Get(HeaderAction),
 		ForwardedHost:  r.Header.Get(HeaderForwardedHost),
 		ForwardedProto: r.Header.Get(HeaderForwardedProto),
@@ -55,6 +58,9 @@ func ReadControlMessage(r *http.Request) (*ControlMessage, error) {
 
 	var missing []string
 
+	if msg.LocalAddr == "" {
+		missing = append(missing, HeaderLocalAddr)
+	}
 	if msg.Action == "" {
 		missing = append(missing, HeaderAction)
 	}
@@ -74,6 +80,7 @@ func ReadControlMessage(r *http.Request) (*ControlMessage, error) {
 
 // WriteToHeader writes ControlMessage to HTTP header.
 func (c *ControlMessage) WriteToHeader(h http.Header) {
+	h.Set(HeaderLocalAddr, c.LocalAddr)
 	h.Set(HeaderAction, string(c.Action))
 	h.Set(HeaderForwardedHost, c.ForwardedHost)
 	h.Set(HeaderForwardedProto, c.ForwardedProto)

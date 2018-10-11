@@ -68,7 +68,7 @@ func (p *TCPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage
 		return
 	}
 
-	target := p.localAddrFor(msg.ForwardedHost)
+	target := p.localAddrFor(msg.LocalAddr)
 	if target == "" {
 		p.logger.Log(
 			"level", 1,

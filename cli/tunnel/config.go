@@ -2,7 +2,7 @@
 // Use of this source code is governed by an AGPL-style
 // license that can be found in the LICENSE file.
 
-package main
+package tunnel
 
 import (
 	"fmt"
@@ -33,8 +33,8 @@ type BackoffConfig struct {
 
 // Tunnel defines a tunnel.
 type Tunnel struct {
-	Protocol   string `yaml:"proto,omitempty"`
-	Addr       string `yaml:"addr,omitempty"`
+	Protocol   string `yaml:"protocol,omitempty"`
+	LocalAddr  string `yaml:"local_addr,omitempty"`
 	Auth       string `yaml:"auth,omitempty"`
 	Host       string `yaml:"host,omitempty"`
 	RemoteAddr string `yaml:"remote_addr,omitempty"`
@@ -42,6 +42,7 @@ type Tunnel struct {
 
 // ClientConfig is a tunnel client configuration.
 type ClientConfig struct {
+	Registered bool               `yaml:"registered"`
 	ServerAddr string             `yaml:"server_addr"`
 	TLSCrt     string             `yaml:"tls_crt"`
 	TLSKey     string             `yaml:"tls_key"`
@@ -81,11 +82,11 @@ func loadClientConfigFromFile(file string) (*ClientConfig, error) {
 	for name, t := range c.Tunnels {
 		switch t.Protocol {
 		case proto.HTTP:
-			if err := validateHTTP(t); err != nil {
+			if err := validateHTTP(c.Registered, t); err != nil {
 				return nil, fmt.Errorf("%s %s", name, err)
 			}
 		case proto.TCP, proto.TCP4, proto.TCP6:
-			if err := validateTCP(t); err != nil {
+			if err := validateTCP(c.Registered, t); err != nil {
 				return nil, fmt.Errorf("%s %s", name, err)
 			}
 		default:
@@ -96,15 +97,15 @@ func loadClientConfigFromFile(file string) (*ClientConfig, error) {
 	return &c, nil
 }
 
-func validateHTTP(t *Tunnel) error {
+func validateHTTP(registered bool, t *Tunnel) error {
 	var err error
-	if t.Host == "" {
+	if !registered && t.Host == "" {
 		return fmt.Errorf("host: missing")
 	}
-	if t.Addr == "" {
+	if t.LocalAddr == "" {
 		return fmt.Errorf("addr: missing")
 	}
-	if t.Addr, err = normalizeURL(t.Addr); err != nil {
+	if t.LocalAddr, err = normalizeURL(t.LocalAddr); err != nil {
 		return fmt.Errorf("addr: %s", err)
 	}
 
@@ -117,15 +118,17 @@ func validateHTTP(t *Tunnel) error {
 	return nil
 }
 
-func validateTCP(t *Tunnel) error {
+func validateTCP(registered bool, t *Tunnel) error {
 	var err error
-	if t.RemoteAddr, err = normalizeAddress(t.RemoteAddr); err != nil {
-		return fmt.Errorf("remote_addr: %s", err)
+	if !registered {
+		if t.RemoteAddr, err = normalizeAddress(t.RemoteAddr); err != nil {
+			return fmt.Errorf("remote_addr: %s", err)
+		}
 	}
-	if t.Addr == "" {
+	if t.LocalAddr == "" {
 		return fmt.Errorf("addr: missing")
 	}
-	if t.Addr, err = normalizeAddress(t.Addr); err != nil {
+	if t.LocalAddr, err = normalizeAddress(t.LocalAddr); err != nil {
 		return fmt.Errorf("addr: %s", err)
 	}
 
