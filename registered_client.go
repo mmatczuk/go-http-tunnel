@@ -34,6 +34,7 @@ func IsNotRegistered(err error) (ok bool) {
 }
 
 type RegisteredClientConfig struct {
+	Disabled    bool
 	ID          id.ID
 	Name        string
 	Description string
@@ -51,7 +52,8 @@ type RegisteredClientsFileSystemProvider struct {
 }
 
 func (p *RegisteredClientsFileSystemProvider) Get(clientID id.ID) (client *RegisteredClientConfig, err error) {
-	pth := filepath.Join(p.StorageDir, clientID.String()+".yaml")
+	base := filepath.Join(p.StorageDir, clientID.String())
+	pth := filepath.Join(base, "config.yaml")
 	var f io.ReadCloser
 	if f, err = os.Open(pth); err != nil {
 		if os.IsNotExist(err) {
@@ -71,6 +73,10 @@ func (p *RegisteredClientsFileSystemProvider) Get(clientID id.ID) (client *Regis
 	client.ID = clientID
 	if client.Tunnels == nil {
 		client.Tunnels = map[string]*proto.Tunnel{}
+	}
+
+	if _, err := os.Stat(filepath.Join(base, "disabled")); err == nil {
+		client.Disabled = true
 	}
 	return
 }

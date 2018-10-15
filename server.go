@@ -220,6 +220,13 @@ func (s *Server) handleClient(conn net.Conn, main bool) {
 		s.Subscribe(ID)
 	} else if s.config.RegisteredClientsProvider != nil {
 		if cfg, err = s.config.RegisteredClientsProvider.Get(ID); err == nil {
+			if cfg.Disabled {
+				logger.Log(
+					"level", 2,
+					"msg", "Client has be disabled",
+				)
+				goto Reject
+			}
 			if s.connPool.Has(ID) {
 				if ccon, err = s.connPool.AddClientConnection(ID, conn); err != nil {
 					goto Reject
