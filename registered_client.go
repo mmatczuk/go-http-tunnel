@@ -57,7 +57,7 @@ func (p *RegisteredClientsFileSystemProvider) Get(clientID id.ID) (client *Regis
 	var f io.ReadCloser
 	if f, err = os.Open(pth); err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return nil, &ErrClientNotRegistered{clientID}
 		}
 		return nil, err
 	}

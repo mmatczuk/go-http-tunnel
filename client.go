@@ -49,7 +49,6 @@ type ClientConfig struct {
 	Description string
 	// Registered if client is registered on server.
 	Registered bool
-	// Disabled if set to true block this client.
 }
 
 type ClientToServerConn struct {

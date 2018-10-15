@@ -283,7 +283,7 @@ func (s *Server) handleClient(conn net.Conn, main bool) {
 
 	inConnPool = true
 
-	req, err = http.NewRequest(http.MethodConnect, s.connPool.URL(controller.ID), body)
+	req, err = s.connPool.newRequest(http.MethodConnect, controller.ID, body)
 	if err != nil {
 		logger.Log(
 			"level", 2,
@@ -298,12 +298,14 @@ func (s *Server) handleClient(conn net.Conn, main bool) {
 	}
 
 	{
-		ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
+		ctx, cancel := context.WithTimeout(req.Context(), DefaultTimeout)
 		defer cancel()
 		req = req.WithContext(ctx)
 	}
 
 	resp, err = s.httpClient.Do(req)
+	defer s.connPool.closeReqConn(req)
+
 	if err != nil {
 		logger.Log(
 			"level", 2,
@@ -419,7 +421,7 @@ func (s *Server) notifyError(serverError error, identifier id.ID) {
 		return
 	}
 
-	req, err := http.NewRequest(http.MethodConnect, s.connPool.URL(identifier), nil)
+	req, err := s.connPool.newRequest(http.MethodConnect, identifier, nil)
 	if err != nil {
 		s.logger.Log(
 			"level", 2,
@@ -661,8 +663,9 @@ func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMe
 	if err != nil {
 		return err
 	}
+	defer s.connPool.closeReqConn(req)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(req.Context())
 	req = req.WithContext(ctx)
 
 	done := make(chan struct{})
@@ -680,6 +683,7 @@ func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMe
 	if err != nil {
 		return fmt.Errorf("io error: %s", err)
 	}
+
 	defer resp.Body.Close()
 
 	transfer(conn, resp.Body, log.NewContext(s.logger).With(
@@ -716,6 +720,7 @@ func (s *Server) proxyHTTP(identifier id.ID, r *http.Request, msg *proto.Control
 	if err != nil {
 		return nil, fmt.Errorf("proxy request error: %s", err)
 	}
+	defer s.connPool.closeReqConn(req)
 
 	go func() {
 		cw := &countWriter{pw, 0}
@@ -765,7 +770,7 @@ func (s *Server) proxyHTTP(identifier id.ID, r *http.Request, msg *proto.Control
 // control message and data input stream, output data stream results from
 // response the created request.
 func (s *Server) connectRequest(identifier id.ID, msg *proto.ControlMessage, r io.Reader) (*http.Request, error) {
-	req, err := http.NewRequest(http.MethodPut, s.connPool.URL(identifier), r)
+	req, err := s.connPool.newRequest(http.MethodPut, identifier, r)
 	if err != nil {
 		return nil, fmt.Errorf("could not create request: %s", err)
 	}

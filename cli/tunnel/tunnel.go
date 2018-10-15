@@ -106,6 +106,7 @@ func MainArgs(args ...string) {
 		Tunnels:         tunnels(config.Tunnels),
 		Proxy:           proxy(config.Tunnels, logger),
 		Logger:          logger,
+		Registered:      config.Registered,
 	})
 	if err != nil {
 		fatal("failed to create client: %s", err)

@@ -7,8 +7,10 @@ package tunnel
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"sort"
 	"sync"
 	"time"
 
@@ -17,19 +19,31 @@ import (
 	"github.com/mmatczuk/go-http-tunnel/id"
 )
 
+const reqPool = "req.pool"
+
 type clientConnections struct {
 	first  *clientConnection
 	last   *clientConnection
 	count  int
 	mu     sync.Mutex
 	lastid int
+	conns  []*clientConnection
+}
+
+func (cs *clientConnections) low() *clientConnection {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	sort.Slice(cs.conns, func(i, j int) bool {
+		return cs.conns[i].count < cs.conns[j].count
+	})
+	return cs.conns[0].increase()
 }
 
 func (cs *clientConnections) add(con *http2.ClientConn) *clientConnection {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
-	c := &clientConnection{con, cs.last, nil, cs.lastid}
+	c := &clientConnection{con, cs.last, nil, cs.lastid, 0}
 	cs.lastid++
 	if cs.last == nil {
 		cs.first = c
@@ -38,6 +52,7 @@ func (cs *clientConnections) add(con *http2.ClientConn) *clientConnection {
 	}
 	cs.last = c
 	cs.count++
+	cs.conns = append(cs.conns, c)
 	return cs.last
 }
 
@@ -65,11 +80,26 @@ func (cs *clientConnections) remove(c *clientConnection) {
 	cs.count--
 }
 
+type clientConnectionSetter struct {
+	conn *clientConnection
+}
+
 type clientConnection struct {
 	*http2.ClientConn
-	prev *clientConnection
-	next *clientConnection
-	id   int
+	prev  *clientConnection
+	next  *clientConnection
+	id    int
+	count int
+}
+
+func (c *clientConnection) decrease() *clientConnection {
+	c.count--
+	return c
+}
+
+func (c *clientConnection) increase() *clientConnection {
+	c.count++
+	return c
 }
 
 type connPair struct {
@@ -83,12 +113,9 @@ type connPair struct {
 func (cp *connPair) next() *clientConnection {
 	cp.mu.Lock()
 	defer cp.mu.Unlock()
-	if cp.current == nil || cp.current.next == nil {
-		cp.current = cp.conns.first
-	} else {
-		cp.current = cp.current.next
-	}
-	return cp.current
+	con := cp.conns.low()
+	cp.current = con
+	return con
 }
 
 type connPool struct {
@@ -105,7 +132,14 @@ func newConnPool(t *http2.Transport, f func(identifier id.ID)) *connPool {
 		conns: make(map[string]*connPair),
 	}
 }
-
+func (p *connPool) newRequest(method string, identifier id.ID, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequest(method, p.URL(identifier), body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(context.WithValue(req.Context(), reqPool, &clientConnectionSetter{}))
+	return req, err
+}
 func (p *connPool) URL(identifier id.ID) string {
 	return fmt.Sprint("https://", identifier)
 }
@@ -116,6 +150,8 @@ func (p *connPool) GetClientConn(req *http.Request, addr string) (*http2.ClientC
 
 	if cp, ok := p.conns[addr]; ok {
 		conn := cp.next()
+		setter := req.Context().Value(reqPool)
+		setter.(*clientConnectionSetter).conn = conn
 		cp.controller.logger.Log("level", 3, "client_conn", fmt.Sprintf("#%d", conn.id), "addr", addr)
 		return conn.ClientConn, nil
 	}
@@ -194,6 +230,12 @@ func (p *connPool) DeleteConn(identifier id.ID) {
 
 	if cp, ok := p.conns[addr]; ok {
 		p.close(cp, addr)
+	}
+}
+
+func (p *connPool) closeReqConn(req *http.Request) {
+	if conn := req.Context().Value(reqPool); conn != nil {
+		conn.(*clientConnectionSetter).conn.decrease()
 	}
 }
 
