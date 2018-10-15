@@ -150,8 +150,9 @@ func (p *connPool) GetClientConn(req *http.Request, addr string) (*http2.ClientC
 
 	if cp, ok := p.conns[addr]; ok {
 		conn := cp.next()
-		setter := req.Context().Value(reqPool)
-		setter.(*clientConnectionSetter).conn = conn
+		if setter := req.Context().Value(reqPool); setter != nil {
+			setter.(*clientConnectionSetter).conn = conn
+		}
 		cp.controller.logger.Log("level", 3, "client_conn", fmt.Sprintf("#%d", conn.id), "addr", addr)
 		return conn.ClientConn, nil
 	}

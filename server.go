@@ -336,6 +336,7 @@ func (s *Server) handleClient(conn net.Conn, main bool) {
 	}
 
 	if cfg == nil {
+		cfg = &RegisteredClientConfig{}
 		if err = json.NewDecoder(&io.LimitedReader{R: resp.Body, N: 126976}).Decode(cfg); err != nil {
 			logger.Log(
 				"level", 2,

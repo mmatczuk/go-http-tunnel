@@ -89,12 +89,13 @@ func makeEcho(t testing.TB) (http net.Listener, tcp net.Listener) {
 	return
 }
 
-func makeTunnelServer(t testing.TB) *tunnel.Server {
+func makeTunnelServer(t testing.TB, clientsProvider tunnel.RegisteredClientsProvider) *tunnel.Server {
 	s, err := tunnel.NewServer(&tunnel.ServerConfig{
 		Addr:          ":0",
-		AutoSubscribe: true,
+		AutoSubscribe: clientsProvider == nil,
 		TLSConfig:     tlsConfig(),
 		Logger:        log.NewStdLogger(),
+		RegisteredClientsProvider: clientsProvider,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -118,14 +119,14 @@ func makeTunnelClient(t testing.TB, serverAddr string, httpLocalAddr, httpAddr, 
 
 	tunnels := map[string]*proto.Tunnel{
 		proto.HTTP: {
-			Protocol: proto.HTTP,
-			Host:     "localhost",
-			Auth:     "user:password",
+			Protocol:  proto.HTTP,
+			Host:      "localhost",
+			Auth:      "user:password",
 			LocalAddr: httpLocalAddr.String(),
 		},
 		proto.TCP: {
-			Protocol: proto.TCP,
-			LocalAddr:     tcpLocalAddr.String(),
+			Protocol:  proto.TCP,
+			LocalAddr: tcpLocalAddr.String(),
 		},
 	}
 
@@ -158,7 +159,7 @@ func TestIntegration(t *testing.T) {
 	defer tcp.Close()
 
 	// server
-	s := makeTunnelServer(t)
+	s := makeTunnelServer(t, nil)
 	defer s.Stop()
 	h := httptest.NewServer(s)
 	defer h.Close()
@@ -197,9 +198,97 @@ func TestIntegration(t *testing.T) {
 			}()
 			wg.Add(1)
 			go func() {
-				testTCP(t, tcpLocalAddr, p, r)
+				testTCP(t, tcpLocalAddr, p, r, false)
 				wg.Done()
 			}()
+		}
+	}
+	wg.Wait()
+}
+
+func makeTunnelRegisteredClient(t testing.TB, serverAddr string, tcpLocalAddr net.Addr) *tunnel.Client {
+	tcpProxy := tunnel.NewTCPProxy(tcpLocalAddr.String(), log.NewStdLogger())
+
+	tunnels := map[string]*proto.Tunnel{
+		proto.TCP: {
+			Protocol:  proto.TCP,
+			LocalAddr: tcpLocalAddr.String(),
+		},
+	}
+
+	c, err := tunnel.NewClient(&tunnel.ClientConfig{
+		ServerAddr:      serverAddr,
+		TLSClientConfig: tlsConfig(),
+		Tunnels:         tunnels,
+		Registered:      true,
+		Proxy: tunnel.Proxy(tunnel.ProxyFuncs{
+			TCP: tcpProxy.Proxy,
+		}),
+		Logger: log.NewStdLogger(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		if err := c.Start(); err != nil {
+			t.Log(err)
+		}
+	}()
+
+	return c
+}
+
+func TestRegisteredClientIntegration(t *testing.T) {
+	// local services
+	tcp, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go echoTCP(tcp)
+	defer tcp.Close()
+
+	tcpRemoteAddr := freeAddr()
+	numConnections := 3
+
+	// server
+	s := makeTunnelServer(t, &registeredClientsProvider{&tunnel.RegisteredClientConfig{
+		Connections: numConnections,
+		Tunnels: map[string]*proto.Tunnel{
+			proto.TCP: {
+				Protocol:   proto.TCP,
+				RemoteAddr: tcpRemoteAddr.String(),
+			},
+		},
+	}})
+	defer s.Stop()
+
+	// controller
+	c := makeTunnelRegisteredClient(t, s.Addr(), tcp.Addr())
+	// FIXME: replace sleep with controller state change watch when ready
+	time.Sleep(500 * time.Millisecond)
+	defer c.Stop()
+
+	payload := randPayload(payloadInitialSize, payloadLen)
+	table := []struct {
+		S []uint
+	}{
+		{[]uint{200, 160, 120, 80, 40, 20}},
+		{[]uint{40, 80, 120, 160, 200}},
+		{[]uint{0, 0, 0, 0, 0, 200}},
+	}
+
+	var wg sync.WaitGroup
+	for _, test := range table {
+		for i, repeat := range test.S {
+			p := payload[i]
+			r := repeat
+			for i := 0; i <= numConnections; i++ {
+				wg.Add(1)
+				go func() {
+					testTCP(t, tcpRemoteAddr, p, r, true)
+					wg.Done()
+				}()
+			}
 		}
 	}
 	wg.Wait()
@@ -234,12 +323,16 @@ func testHTTP(t testing.TB, addr net.Addr, payload []byte, repeat uint) {
 	}
 }
 
-func testTCP(t testing.TB, addr net.Addr, payload []byte, repeat uint) {
+func testTCP(t testing.TB, addr net.Addr, payload []byte, repeat uint, sleep bool) {
 	conn, err := net.Dial("tcp", addr.String())
 	if err != nil {
 		t.Fatal("Dial failed", err)
 	}
 	defer conn.Close()
+
+	if sleep {
+		time.Sleep(50 * time.Millisecond)
+	}
 
 	var buf = make([]byte, 10*1024*1024)
 	var read, write int
