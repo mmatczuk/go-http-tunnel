@@ -160,8 +160,10 @@ $ mkdir registered_clients
 
 On client, get ID: `$ tunnel id`
 
-Configure client (file `registered_clients/CLIENT_ID.yaml`).
-Example `registered_clients/SS2KPSV-5KG2URM-WYUEDLY-FBDAD7A-MUUVTDX-TL7KL45-2PQEQAD-IN4LVAH.yaml`:
+Registered **Client DIR** `registered_clients/CLIENT_ID`.
+
+Configure client (file `config.yaml`).
+Example `registered_clients/SS2KPSV-5KG2URM-WYUEDLY-FBDAD7A-MUUVTDX-TL7KL45-2PQEQAD-IN4LVAH/config.yaml`:
 
 ```yaml
 connections: 4
@@ -175,7 +177,8 @@ tunnels:
 ```
 
 Configuration options:
-* `disabled`: if set to `true` block this client.
+* `disabled`: if set to `true` block this client. Or create empty file `disabled` on client dir. 
+Example: `$ touch registered_clients/CLIENT_ID/disabled`. 
 * `connections`: number of connections in addition to the main connection. Default is `0`.
 *  `tunnels / [name]`
     * `proto`: tunnel protocol, `http` or `tcp`
