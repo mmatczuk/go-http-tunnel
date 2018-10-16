@@ -19,7 +19,7 @@ import (
 	"github.com/mmatczuk/go-http-tunnel/id"
 )
 
-const reqPool = "req.pool"
+const connKey = "conn"
 
 type clientConnections struct {
 	first  *clientConnection
@@ -137,7 +137,7 @@ func (p *connPool) newRequest(method string, identifier id.ID, body io.Reader) (
 	if err != nil {
 		return nil, err
 	}
-	req = req.WithContext(context.WithValue(req.Context(), reqPool, &clientConnectionSetter{}))
+	req = req.WithContext(context.WithValue(req.Context(), connKey, &clientConnectionSetter{}))
 	return req, err
 }
 func (p *connPool) URL(identifier id.ID) string {
@@ -150,7 +150,7 @@ func (p *connPool) GetClientConn(req *http.Request, addr string) (*http2.ClientC
 
 	if cp, ok := p.conns[addr]; ok {
 		conn := cp.next()
-		if setter := req.Context().Value(reqPool); setter != nil {
+		if setter := req.Context().Value(connKey); setter != nil {
 			setter.(*clientConnectionSetter).conn = conn
 		}
 		cp.controller.logger.Log("level", 3, "client_conn", fmt.Sprintf("#%d", conn.id), "addr", addr)
@@ -235,7 +235,7 @@ func (p *connPool) DeleteConn(identifier id.ID) {
 }
 
 func (p *connPool) closeReqConn(req *http.Request) {
-	if conn := req.Context().Value(reqPool); conn != nil {
+	if conn := req.Context().Value(connKey); conn != nil {
 		conn.(*clientConnectionSetter).conn.decrease()
 	}
 }
