@@ -198,6 +198,56 @@ Client:
 $ tunnel start-all
 ```
 
+### Embeded
+
+#### tunnel
+Example for embed `tunnel` in your code.
+
+```go
+package main
+
+import "github.com/mmatczuk/go-http-tunnel/cli/tunnel"
+
+func tunnelClient() {
+	options, err := tunnel.ParseArgs(false, "mycmd", "start-all")
+	if err != nil {
+		panic(err)
+	}
+	tunnel.MainConfigOptions(&tunnel.ClientConfig{
+		ServerAddr: "domain.com:2000",
+		Tunnels: map[string]*tunnel.Tunnel{
+			"main": {
+				Protocol:   "tcp",
+				LocalAddr:  "localhost:5000",
+				RemoteAddr: "domain.com:5000",
+			},
+		},
+	}, options)
+}
+
+func main() {
+	go tunnelClient()
+
+	// ... my system code
+}
+```
+
+#### tunneld
+
+Example for embed `tunneld` in your code.
+
+```go
+package main
+
+import "github.com/mmatczuk/go-http-tunnel/cli/tunneld"
+
+func main() {
+	go tunneld.MainArgs("mycmd", "-log-level", "3", "-httpAddr", ":19000", "-httpsAddr", ":19001")
+
+	// ... my system code
+}
+```
+
 ## How it works
 
 A client opens TLS connection to a server. The server accepts connections from known clients only. The client is recognized by its TLS certificate ID. The server is publicly available and proxies incoming connections to the client. Then the connection is further proxied in the client's network.
