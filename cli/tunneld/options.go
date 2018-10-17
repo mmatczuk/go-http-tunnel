@@ -49,7 +49,9 @@ type options struct {
 	version    bool
 }
 
-func parseArgs(args ...string) *options {
+func ParseArgs(args ...string) *options {
+	flag := flag.NewFlagSet(args[0], flag.ExitOnError)
+	args = args[1:]
 	httpAddr := flag.String("httpAddr", ":80", "Public address for HTTP connections, empty string to disable")
 	httpsAddr := flag.String("httpsAddr", ":443", "Public address listening for HTTPS connections, emptry string to disable")
 	tunnelAddr := flag.String("tunnelAddr", ":5223", "Public address listening for tunnel client")
@@ -60,7 +62,7 @@ func parseArgs(args ...string) *options {
 	clientsDir := flag.String("registeredClientsDB", "", "Database directory of registered clients")
 	logLevel := flag.Int("log-level", 1, "Level of messages to log, 0-3")
 	version := flag.Bool("version", false, "Prints tunneld version")
-	flag.CommandLine.Parse(args)
+	flag.Parse(args)
 
 	return &options{
 		httpAddr:   *httpAddr,

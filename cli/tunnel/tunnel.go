@@ -28,25 +28,36 @@ func Main() {
 }
 
 func MainArgs(args ...string) {
-	opts, err := parseArgs(args...)
+	opts, err := ParseArgs(true, args...)
 	if err != nil {
 		fatal(err.Error())
 	}
+	MainOpts(opts)
+}
 
+func MainOpts(opts *options) {
 	if opts.version {
 		fmt.Println(version)
 		return
 	}
 
-	logger := log.NewFilterLogger(log.NewStdLogger(), opts.logLevel)
-
 	// read configuration file
-	config, err := loadClientConfigFromFile(opts.config)
+	config, err := LoadClientConfigFromFile(opts.config)
 	if err != nil {
 		fatal("configuration error: %s", err)
 	}
 
-	switch opts.command {
+	MainConfigOptions(config, opts)
+}
+
+func MainConfigOptions(config *ClientConfig, options *options) {
+	MainConfig(config, options.logLevel, options.command, options.args...)
+}
+
+func MainConfig(config *ClientConfig, logLevel int, command string, args ...string) {
+	logger := log.NewFilterLogger(log.NewStdLogger(), logLevel)
+
+	switch command {
 	case "id":
 		cert, err := tls.LoadX509KeyPair(config.TLSCrt, config.TLSKey)
 		if err != nil {
@@ -74,7 +85,7 @@ func MainArgs(args ...string) {
 		return
 	case "start":
 		tunnels := make(map[string]*Tunnel)
-		for _, arg := range opts.args {
+		for _, arg := range args {
 			t, ok := config.Tunnels[arg]
 			if !ok {
 				fatal("no such tunnel %q", arg)

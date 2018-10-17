@@ -21,11 +21,11 @@ import (
 )
 
 func Main() {
-	MainArgs(os.Args[1:]...)
+	MainArgs(os.Args...)
 }
 
 func MainArgs(args ...string) {
-	opts := parseArgs(args...)
+	opts := ParseArgs(args...)
 
 	if opts.version {
 		fmt.Println(version)

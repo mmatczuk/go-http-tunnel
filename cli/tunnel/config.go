@@ -51,7 +51,7 @@ type ClientConfig struct {
 	Tunnels    map[string]*Tunnel `yaml:"tunnels"`
 }
 
-func loadClientConfigFromFile(file string) (*ClientConfig, error) {
+func LoadClientConfigFromFile(file string) (*ClientConfig, error) {
 	buf, err := ioutil.ReadFile(file)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file %q: %s", file, err)

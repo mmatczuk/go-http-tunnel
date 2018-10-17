@@ -67,24 +67,44 @@ func init() {
 }
 
 type options struct {
-	config     string
-	logLevel   int
-	version    bool
-	command    string
-	args       []string
+	config   string
+	logLevel int
+	version  bool
+	command  string
+	args     []string
 }
 
-func parseArgs(args ...string) (*options, error) {
-	config := flag.String("config", "tunnel.yaml", "Path to tunnel configuration file")
-	logLevel := flag.Int("log-level", 1, "Level of messages to log, 0-3")
-	version := flag.Bool("version", false, "Prints tunnel version")
-	flag.CommandLine.Parse(args)
+func (opt options) Command() string {
+	return opt.command
+}
+
+func (opt options) LogLevel() int {
+	return opt.logLevel
+}
+
+func (opt options) Args() []string {
+	return opt.args
+}
+
+func ParseArgs(hasConfig bool, args ...string) (*options, error) {
+	var config *string
+	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
+	args = args[1:]
+	if hasConfig {
+		config = cli.String("config", "tunnel.yaml", "Path to tunnel configuration file")
+	} else {
+		var s = ""
+		config = &s
+	}
+	logLevel := cli.Int("log-level", 1, "Level of messages to log, 0-3")
+	version := cli.Bool("version", false, "Prints tunnel version")
+	cli.Parse(args)
 
 	opts := &options{
-		config:     *config,
-		logLevel:   *logLevel,
-		version:    *version,
-		command:    flag.Arg(0),
+		config:   *config,
+		logLevel: *logLevel,
+		version:  *version,
+		command:  cli.Arg(0),
 	}
 
 	if opts.version {
@@ -93,20 +113,20 @@ func parseArgs(args ...string) (*options, error) {
 
 	switch opts.command {
 	case "":
-		flag.Usage()
+		cli.Usage()
 		os.Exit(2)
 	case "id", "list":
-		opts.args = flag.Args()[1:]
+		opts.args = cli.Args()[1:]
 		if len(opts.args) > 0 {
 			return nil, fmt.Errorf("list takes no arguments")
 		}
 	case "start":
-		opts.args = flag.Args()[1:]
+		opts.args = cli.Args()[1:]
 		if len(opts.args) == 0 {
 			return nil, fmt.Errorf("you must specify at least one tunnel to start")
 		}
 	case "start-all":
-		opts.args = flag.Args()[1:]
+		opts.args = cli.Args()[1:]
 		if len(opts.args) > 0 {
 			return nil, fmt.Errorf("start-all takes no arguments")
 		}

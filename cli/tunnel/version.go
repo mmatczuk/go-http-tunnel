@@ -5,3 +5,8 @@
 package tunnel
 
 var version = "snapshot"
+
+// Return the tunnel version
+func GetVersion() string {
+	return version
+}
