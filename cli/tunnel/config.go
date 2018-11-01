@@ -7,6 +7,7 @@ package tunnel
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -21,6 +22,7 @@ const (
 	DefaultBackoffMultiplier  = 1.5
 	DefaultBackoffMaxInterval = 60 * time.Second
 	DefaultBackoffMaxTime     = 15 * time.Minute
+	ConfigFileSTDIN           = "-"
 )
 
 // BackoffConfig defines behavior of staggering reconnection retries.
@@ -52,9 +54,19 @@ type ClientConfig struct {
 }
 
 func LoadClientConfigFromFile(file string) (*ClientConfig, error) {
-	buf, err := ioutil.ReadFile(file)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file %q: %s", file, err)
+	var (
+		buf []byte
+		err error
+	)
+	if file == ConfigFileSTDIN {
+		if buf, err = ioutil.ReadAll(os.Stdin); err != nil {
+			return nil, fmt.Errorf("failed to read config from STDIN: ", err)
+		}
+		file = "STDIN"
+	} else {
+		if buf, err = ioutil.ReadFile(file); err != nil {
+			return nil, fmt.Errorf("failed to read file %q: %s", file, err)
+		}
 	}
 
 	c := ClientConfig{

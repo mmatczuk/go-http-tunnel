@@ -24,7 +24,7 @@ import (
 )
 
 func Main() {
-	MainArgs(os.Args[1:]...)
+	MainArgs(os.Args...)
 }
 
 func MainArgs(args ...string) {

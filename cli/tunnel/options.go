@@ -91,7 +91,8 @@ func ParseArgs(hasConfig bool, args ...string) (*options, error) {
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	args = args[1:]
 	if hasConfig {
-		config = cli.String("config", "tunnel.yaml", "Path to tunnel configuration file")
+		config = cli.String("config", "tunnel.yaml",
+			"Path to tunnel configuration file. Use HYPHEN (-) for read STDIN.")
 	} else {
 		var s = ""
 		config = &s
