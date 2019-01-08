@@ -155,15 +155,15 @@ Configuration options:
 Create registered clients database structure if not exists:
 
 ```bash
-$ mkdir registered_clients
+$ mkdir clients
 ```
 
 On client, get ID: `$ tunnel id`
 
-Registered **Client DIR** `registered_clients/CLIENT_ID`.
+Registered **Client DIR** `clients/CLIENT_ID`.
 
 Configure client (file `config.yaml`).
-Example `registered_clients/SS2KPSV-5KG2URM-WYUEDLY-FBDAD7A-MUUVTDX-TL7KL45-2PQEQAD-IN4LVAH/config.yaml`:
+Example `clients/SS2KPSV-5KG2URM-WYUEDLY-FBDAD7A-MUUVTDX-TL7KL45-2PQEQAD-IN4LVAH/config.yaml`:
 
 ```yaml
 connections: 4
@@ -178,7 +178,7 @@ tunnels:
 
 Configuration options:
 * `disabled`: if set to `true` block this client. Or create empty file `disabled` on client dir. 
-Example: `$ touch registered_clients/CLIENT_ID/disabled`. 
+Example: `$ touch clients/CLIENT_ID/disabled`. 
 * `connections`: number of connections in addition to the main connection. Default is `0`.
 *  `tunnels / [name]`
     * `proto`: tunnel protocol, `http` or `tcp`
@@ -190,13 +190,48 @@ Example: `$ touch registered_clients/CLIENT_ID/disabled`.
 
 Server:
 ```bash
-$ tunneld -registeredClientsDB registered_clients
+$ tunneld -clientsDir ./clients
+
+# or (using default clients dir, only if dir exists)
+
+$ tunneld 
 ```
 
 Client:
 ```bash
 $ tunnel start-all
 ```
+
+#### With Supervisor
+
+Server example:
+
+    [program:tunneld]
+    directory=/etc/tunneld
+    command=/usr/bin/tunneld
+    autostart=true
+    autorestart=true
+    stdout_logfile=/var/log/tunneld.log
+    stdout_logfile_maxbytes=5MB
+    stdout_logfile_backups=2
+    redirect_stderr=true
+    user = root
+    environment = HOME="/root", USER="root"
+    
+Client example:
+
+    [program:tunnel]
+    directory=/etc/tunnel
+    command=/usr/bin/tunnel
+    autostart=true
+    autorestart=true
+    startsecs=10
+    stdout_logfile=/var/log/tunnel.log
+    stdout_logfile_maxbytes=5MB
+    stdout_logfile_backups=2
+    redirect_stderr=true
+    user = root
+    environment = HOME="/root", USER="root"
 
 ### Embeded
 

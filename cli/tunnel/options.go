@@ -86,7 +86,7 @@ func (opt options) Args() []string {
 	return opt.args
 }
 
-func ParseArgs(hasConfig bool, args ...string) (*options, error) {
+func ParseArgs(hasConfig bool, args ...string) (opts *options, err error) {
 	var config *string
 	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
 	args = args[1:]
@@ -99,9 +99,11 @@ func ParseArgs(hasConfig bool, args ...string) (*options, error) {
 	}
 	logLevel := cli.Int("log-level", 1, "Level of messages to log, 0-3")
 	version := cli.Bool("version", false, "Prints tunnel version")
-	cli.Parse(args)
+	if err = cli.Parse(args); err != nil {
+		return nil, err
+	}
 
-	opts := &options{
+	opts = &options{
 		config:   *config,
 		logLevel: *logLevel,
 		version:  *version,
@@ -114,8 +116,6 @@ func ParseArgs(hasConfig bool, args ...string) (*options, error) {
 
 	switch opts.command {
 	case "":
-		cli.Usage()
-		os.Exit(2)
 	case "id", "list":
 		opts.args = cli.Args()[1:]
 		if len(opts.args) > 0 {

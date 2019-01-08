@@ -41,12 +41,16 @@ func MainArgs(args ...string) {
 		fatal("failed to configure tls: %s", err)
 	}
 
-	autoSubscribe := opts.clients == "" && opts.clientsDir == ""
-
 	var clientsProvider tunnel.RegisteredClientsProvider
 	if opts.clientsDir != "" {
-		clientsProvider = &tunnel.RegisteredClientsFileSystemProvider{opts.clientsDir}
+		if _, err := os.Stat(opts.clientsDir); err == nil {
+			clientsProvider = &tunnel.RegisteredClientsFileSystemProvider{opts.clientsDir}
+		} else {
+			opts.clientsDir = ""
+		}
 	}
+
+	autoSubscribe := opts.clients == "" && opts.clientsDir == ""
 
 	// setup server
 	server, err := tunnel.NewServer(&tunnel.ServerConfig{
@@ -60,23 +64,17 @@ func MainArgs(args ...string) {
 		fatal("failed to create server: %s", err)
 	}
 
-	if !autoSubscribe {
-		if opts.clientsDir != "" {
-			if _, err := os.Stat(opts.clientsDir); err != nil {
-				fatal(err.Error())
+	if !autoSubscribe && clientsProvider == nil {
+		for _, c := range strings.Split(opts.clients, ",") {
+			if c == "" {
+				fatal("empty client id")
 			}
-		} else {
-			for _, c := range strings.Split(opts.clients, ",") {
-				if c == "" {
-					fatal("empty client id")
-				}
-				identifier := id.ID{}
-				err := identifier.UnmarshalText([]byte(c))
-				if err != nil {
-					fatal("invalid identifier %q: %s", c, err)
-				}
-				server.Subscribe(identifier)
+			identifier := id.ID{}
+			err := identifier.UnmarshalText([]byte(c))
+			if err != nil {
+				fatal("invalid identifier %q: %s", c, err)
 			}
+			server.Subscribe(identifier)
 		}
 	}
 

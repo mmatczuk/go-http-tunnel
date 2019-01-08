@@ -58,20 +58,25 @@ func LoadClientConfigFromFile(file string) (*ClientConfig, error) {
 		buf []byte
 		err error
 	)
+
+	var configDir string
+
 	if file == ConfigFileSTDIN {
 		if buf, err = ioutil.ReadAll(os.Stdin); err != nil {
 			return nil, fmt.Errorf("failed to read config from STDIN: ", err)
 		}
 		file = "STDIN"
+		configDir = "."
 	} else {
+		configDir = filepath.Dir(file)
 		if buf, err = ioutil.ReadFile(file); err != nil {
 			return nil, fmt.Errorf("failed to read file %q: %s", file, err)
 		}
 	}
 
 	c := ClientConfig{
-		TLSCrt: filepath.Join(filepath.Dir(file), "client.crt"),
-		TLSKey: filepath.Join(filepath.Dir(file), "client.key"),
+		TLSCrt: "client.crt",
+		TLSKey: "client.key",
 		Backoff: BackoffConfig{
 			Interval:    DefaultBackoffInterval,
 			Multiplier:  DefaultBackoffMultiplier,
@@ -82,6 +87,14 @@ func LoadClientConfigFromFile(file string) (*ClientConfig, error) {
 
 	if err = yaml.Unmarshal(buf, &c); err != nil {
 		return nil, fmt.Errorf("failed to parse file %q: %s", file, err)
+	}
+
+	if filepath.Dir(c.TLSCrt) == "." {
+		c.TLSCrt = filepath.Join(configDir, c.TLSCrt)
+	}
+
+	if filepath.Dir(c.TLSKey) == "." {
+		c.TLSKey = filepath.Join(configDir, c.TLSKey)
 	}
 
 	if c.ServerAddr == "" {
