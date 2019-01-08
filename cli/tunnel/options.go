@@ -2,7 +2,7 @@
 // Use of this source code is governed by an AGPL-style
 // license that can be found in the LICENSE file.
 
-package main
+package tunnel
 
 import (
 	"flag"
@@ -26,18 +26,30 @@ Examples:
 	tunnel -config config.yaml -log-level 2 start ssh
 	tunnel start-all
 
-config.yaml:
+Normal Client config:
+client.yaml:
 	server_addr: SERVER_IP:5223
 	tunnels:
 	  webui:
 	    proto: http
-	    addr: localhost:8080
+	    local_addr: localhost:8080
 	    auth: user:password
 	    host: webui.my-tunnel-host.com
 	  ssh:
 	    proto: tcp
-	    addr: 192.168.0.5:22
+	    local_addr: 192.168.0.5:22
 	    remote_addr: 0.0.0.0:22
+
+Registered Client config:
+registered_client.yaml:
+	registered: true
+	server_addr: SERVER_IP:5223
+	tunnels:
+	  webui:
+	    local_addr: localhost:8080
+	    auth: user:password
+	  ssh:
+	    local_addr: 192.168.0.5:22
 
 Author:
 	Written by M. Matczuk (mmatczuk@gmail.com)
@@ -62,17 +74,40 @@ type options struct {
 	args     []string
 }
 
-func parseArgs() (*options, error) {
-	config := flag.String("config", "tunnel.yml", "Path to tunnel configuration file")
-	logLevel := flag.Int("log-level", 1, "Level of messages to log, 0-3")
-	version := flag.Bool("version", false, "Prints tunnel version")
-	flag.Parse()
+func (opt options) Command() string {
+	return opt.command
+}
 
-	opts := &options{
+func (opt options) LogLevel() int {
+	return opt.logLevel
+}
+
+func (opt options) Args() []string {
+	return opt.args
+}
+
+func ParseArgs(hasConfig bool, args ...string) (opts *options, err error) {
+	var config *string
+	cli := flag.NewFlagSet(args[0], flag.ExitOnError)
+	args = args[1:]
+	if hasConfig {
+		config = cli.String("config", "tunnel.yaml",
+			"Path to tunnel configuration file. Use HYPHEN (-) for read STDIN.")
+	} else {
+		var s = ""
+		config = &s
+	}
+	logLevel := cli.Int("log-level", 1, "Level of messages to log, 0-3")
+	version := cli.Bool("version", false, "Prints tunnel version")
+	if err = cli.Parse(args); err != nil {
+		return nil, err
+	}
+
+	opts = &options{
 		config:   *config,
 		logLevel: *logLevel,
 		version:  *version,
-		command:  flag.Arg(0),
+		command:  cli.Arg(0),
 	}
 
 	if opts.version {
@@ -81,20 +116,18 @@ func parseArgs() (*options, error) {
 
 	switch opts.command {
 	case "":
-		flag.Usage()
-		os.Exit(2)
 	case "id", "list":
-		opts.args = flag.Args()[1:]
+		opts.args = cli.Args()[1:]
 		if len(opts.args) > 0 {
 			return nil, fmt.Errorf("list takes no arguments")
 		}
 	case "start":
-		opts.args = flag.Args()[1:]
+		opts.args = cli.Args()[1:]
 		if len(opts.args) == 0 {
 			return nil, fmt.Errorf("you must specify at least one tunnel to start")
 		}
 	case "start-all":
-		opts.args = flag.Args()[1:]
+		opts.args = cli.Args()[1:]
 		if len(opts.args) > 0 {
 			return nil, fmt.Errorf("start-all takes no arguments")
 		}

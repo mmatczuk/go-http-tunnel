@@ -2,7 +2,7 @@
 // Use of this source code is governed by an AGPL-style
 // license that can be found in the LICENSE file.
 
-package main
+package tunnel
 
 import (
 	"crypto/tls"
@@ -23,26 +23,41 @@ import (
 	"github.com/mmatczuk/go-http-tunnel/proto"
 )
 
-func main() {
-	opts, err := parseArgs()
+func Main() {
+	MainArgs(os.Args...)
+}
+
+func MainArgs(args ...string) {
+	opts, err := ParseArgs(true, args...)
 	if err != nil {
 		fatal(err.Error())
 	}
+	MainOpts(opts)
+}
 
+func MainOpts(opts *options) {
 	if opts.version {
 		fmt.Println(version)
 		return
 	}
 
-	logger := log.NewFilterLogger(log.NewStdLogger(), opts.logLevel)
-
 	// read configuration file
-	config, err := loadClientConfigFromFile(opts.config)
+	config, err := LoadClientConfigFromFile(opts.config)
 	if err != nil {
 		fatal("configuration error: %s", err)
 	}
 
-	switch opts.command {
+	MainConfigOptions(config, opts)
+}
+
+func MainConfigOptions(config *ClientConfig, options *options) {
+	MainConfig(config, options.logLevel, options.command, options.args...)
+}
+
+func MainConfig(config *ClientConfig, logLevel int, command string, args ...string) {
+	logger := log.NewFilterLogger(log.NewStdLogger(), logLevel)
+
+	switch command {
 	case "id":
 		cert, err := tls.LoadX509KeyPair(config.TLSCrt, config.TLSKey)
 		if err != nil {
@@ -70,7 +85,7 @@ func main() {
 		return
 	case "start":
 		tunnels := make(map[string]*Tunnel)
-		for _, arg := range opts.args {
+		for _, arg := range args {
 			t, ok := config.Tunnels[arg]
 			if !ok {
 				fatal("no such tunnel %q", arg)
@@ -102,6 +117,7 @@ func main() {
 		Tunnels:         tunnels(config.Tunnels),
 		Proxy:           proxy(config.Tunnels, logger),
 		Logger:          logger,
+		Registered:      config.Registered,
 	})
 	if err != nil {
 		fatal("failed to create client: %s", err)
@@ -158,10 +174,11 @@ func tunnels(m map[string]*Tunnel) map[string]*proto.Tunnel {
 
 	for name, t := range m {
 		p[name] = &proto.Tunnel{
-			Protocol: t.Protocol,
-			Host:     t.Host,
-			Auth:     t.Auth,
-			Addr:     t.RemoteAddr,
+			Protocol:   t.Protocol,
+			Host:       t.Host,
+			Auth:       t.Auth,
+			LocalAddr:  t.LocalAddr,
+			RemoteAddr: t.RemoteAddr,
 		}
 	}
 
@@ -175,13 +192,13 @@ func proxy(m map[string]*Tunnel, logger log.Logger) tunnel.ProxyFunc {
 	for _, t := range m {
 		switch t.Protocol {
 		case proto.HTTP:
-			u, err := url.Parse(t.Addr)
+			u, err := url.Parse(t.LocalAddr)
 			if err != nil {
 				fatal("invalid tunnel address: %s", err)
 			}
 			httpURL[t.Host] = u
 		case proto.TCP, proto.TCP4, proto.TCP6:
-			tcpAddr[t.RemoteAddr] = t.Addr
+			tcpAddr[t.LocalAddr] = t.LocalAddr
 		}
 	}
 

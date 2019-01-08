@@ -2,7 +2,7 @@
 // Use of this source code is governed by an AGPL-style
 // license that can be found in the LICENSE file.
 
-package main
+package tunneld
 
 import (
 	"crypto/tls"
@@ -20,8 +20,12 @@ import (
 	"github.com/mmatczuk/go-http-tunnel/log"
 )
 
-func main() {
-	opts := parseArgs()
+func Main() {
+	MainArgs(os.Args...)
+}
+
+func MainArgs(args ...string) {
+	opts := ParseArgs(args...)
 
 	if opts.version {
 		fmt.Println(version)
@@ -37,7 +41,16 @@ func main() {
 		fatal("failed to configure tls: %s", err)
 	}
 
-	autoSubscribe := opts.clients == ""
+	var clientsProvider tunnel.RegisteredClientsProvider
+	if opts.clientsDir != "" {
+		if _, err := os.Stat(opts.clientsDir); err == nil {
+			clientsProvider = &tunnel.RegisteredClientsFileSystemProvider{opts.clientsDir}
+		} else {
+			opts.clientsDir = ""
+		}
+	}
+
+	autoSubscribe := opts.clients == "" && opts.clientsDir == ""
 
 	// setup server
 	server, err := tunnel.NewServer(&tunnel.ServerConfig{
@@ -45,12 +58,13 @@ func main() {
 		AutoSubscribe: autoSubscribe,
 		TLSConfig:     tlsconf,
 		Logger:        logger,
+		RegisteredClientsProvider: clientsProvider,
 	})
 	if err != nil {
 		fatal("failed to create server: %s", err)
 	}
 
-	if !autoSubscribe {
+	if !autoSubscribe && clientsProvider == nil {
 		for _, c := range strings.Split(opts.clients, ",") {
 			if c == "" {
 				fatal("empty client id")

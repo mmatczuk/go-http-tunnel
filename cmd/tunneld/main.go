@@ -4,4 +4,8 @@
 
 package main
 
-var version = "snapshot"
+import "github.com/mmatczuk/go-http-tunnel/cli/tunneld"
+
+func main() {
+	tunneld.Main()
+}

@@ -7,9 +7,10 @@ package tunnel
 import "errors"
 
 var (
-	errClientNotSubscribed    = errors.New("client not subscribed")
-	errClientNotConnected     = errors.New("client not connected")
-	errClientAlreadyConnected = errors.New("client already connected")
+	errClientManyConnections  = errors.New("controller has many connections")
+	errClientNotSubscribed    = errors.New("controller not subscribed")
+	errClientNotConnected     = errors.New("controller not connected")
+	errClientAlreadyConnected = errors.New("controller already connected")
 
 	errUnauthorised = errors.New("unauthorised")
 )

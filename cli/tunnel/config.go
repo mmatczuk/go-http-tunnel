@@ -2,11 +2,12 @@
 // Use of this source code is governed by an AGPL-style
 // license that can be found in the LICENSE file.
 
-package main
+package tunnel
 
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -21,6 +22,7 @@ const (
 	DefaultBackoffMultiplier  = 1.5
 	DefaultBackoffMaxInterval = 60 * time.Second
 	DefaultBackoffMaxTime     = 15 * time.Minute
+	ConfigFileSTDIN           = "-"
 )
 
 // BackoffConfig defines behavior of staggering reconnection retries.
@@ -34,7 +36,7 @@ type BackoffConfig struct {
 // Tunnel defines a tunnel.
 type Tunnel struct {
 	Protocol   string `yaml:"proto,omitempty"`
-	Addr       string `yaml:"addr,omitempty"`
+	LocalAddr  string `yaml:"local_addr,omitempty"`
 	Auth       string `yaml:"auth,omitempty"`
 	Host       string `yaml:"host,omitempty"`
 	RemoteAddr string `yaml:"remote_addr,omitempty"`
@@ -42,6 +44,7 @@ type Tunnel struct {
 
 // ClientConfig is a tunnel client configuration.
 type ClientConfig struct {
+	Registered bool               `yaml:"registered"`
 	ServerAddr string             `yaml:"server_addr"`
 	TLSCrt     string             `yaml:"tls_crt"`
 	TLSKey     string             `yaml:"tls_key"`
@@ -50,15 +53,30 @@ type ClientConfig struct {
 	Tunnels    map[string]*Tunnel `yaml:"tunnels"`
 }
 
-func loadClientConfigFromFile(file string) (*ClientConfig, error) {
-	buf, err := ioutil.ReadFile(file)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file %q: %s", file, err)
+func LoadClientConfigFromFile(file string) (*ClientConfig, error) {
+	var (
+		buf []byte
+		err error
+	)
+
+	var configDir string
+
+	if file == ConfigFileSTDIN {
+		if buf, err = ioutil.ReadAll(os.Stdin); err != nil {
+			return nil, fmt.Errorf("failed to read config from STDIN: ", err)
+		}
+		file = "STDIN"
+		configDir = "."
+	} else {
+		configDir = filepath.Dir(file)
+		if buf, err = ioutil.ReadFile(file); err != nil {
+			return nil, fmt.Errorf("failed to read file %q: %s", file, err)
+		}
 	}
 
 	c := ClientConfig{
-		TLSCrt: filepath.Join(filepath.Dir(file), "client.crt"),
-		TLSKey: filepath.Join(filepath.Dir(file), "client.key"),
+		TLSCrt: "client.crt",
+		TLSKey: "client.key",
 		Backoff: BackoffConfig{
 			Interval:    DefaultBackoffInterval,
 			Multiplier:  DefaultBackoffMultiplier,
@@ -71,6 +89,14 @@ func loadClientConfigFromFile(file string) (*ClientConfig, error) {
 		return nil, fmt.Errorf("failed to parse file %q: %s", file, err)
 	}
 
+	if filepath.Dir(c.TLSCrt) == "." {
+		c.TLSCrt = filepath.Join(configDir, c.TLSCrt)
+	}
+
+	if filepath.Dir(c.TLSKey) == "." {
+		c.TLSKey = filepath.Join(configDir, c.TLSKey)
+	}
+
 	if c.ServerAddr == "" {
 		return nil, fmt.Errorf("server_addr: missing")
 	}
@@ -81,11 +107,11 @@ func loadClientConfigFromFile(file string) (*ClientConfig, error) {
 	for name, t := range c.Tunnels {
 		switch t.Protocol {
 		case proto.HTTP:
-			if err := validateHTTP(t); err != nil {
+			if err := validateHTTP(c.Registered, t); err != nil {
 				return nil, fmt.Errorf("%s %s", name, err)
 			}
 		case proto.TCP, proto.TCP4, proto.TCP6:
-			if err := validateTCP(t); err != nil {
+			if err := validateTCP(c.Registered, t); err != nil {
 				return nil, fmt.Errorf("%s %s", name, err)
 			}
 		default:
@@ -96,15 +122,15 @@ func loadClientConfigFromFile(file string) (*ClientConfig, error) {
 	return &c, nil
 }
 
-func validateHTTP(t *Tunnel) error {
+func validateHTTP(registered bool, t *Tunnel) error {
 	var err error
-	if t.Host == "" {
+	if !registered && t.Host == "" {
 		return fmt.Errorf("host: missing")
 	}
-	if t.Addr == "" {
+	if t.LocalAddr == "" {
 		return fmt.Errorf("addr: missing")
 	}
-	if t.Addr, err = normalizeURL(t.Addr); err != nil {
+	if t.LocalAddr, err = normalizeURL(t.LocalAddr); err != nil {
 		return fmt.Errorf("addr: %s", err)
 	}
 
@@ -117,15 +143,17 @@ func validateHTTP(t *Tunnel) error {
 	return nil
 }
 
-func validateTCP(t *Tunnel) error {
+func validateTCP(registered bool, t *Tunnel) error {
 	var err error
-	if t.RemoteAddr, err = normalizeAddress(t.RemoteAddr); err != nil {
-		return fmt.Errorf("remote_addr: %s", err)
+	if !registered {
+		if t.RemoteAddr, err = normalizeAddress(t.RemoteAddr); err != nil {
+			return fmt.Errorf("remote_addr: %s", err)
+		}
 	}
-	if t.Addr == "" {
+	if t.LocalAddr == "" {
 		return fmt.Errorf("addr: missing")
 	}
-	if t.Addr, err = normalizeAddress(t.Addr); err != nil {
+	if t.LocalAddr, err = normalizeAddress(t.LocalAddr); err != nil {
 		return fmt.Errorf("addr: %s", err)
 	}
 

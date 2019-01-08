@@ -20,6 +20,7 @@ func TestControlMessageWriteRead(t *testing.T) {
 	}{
 		{
 			&ControlMessage{
+				LocalAddr:      "local_addr",
 				Action:         "action",
 				ForwardedHost:  "forwarded_host",
 				ForwardedProto: "forwarded_proto",
@@ -28,24 +29,32 @@ func TestControlMessageWriteRead(t *testing.T) {
 		},
 		{
 			&ControlMessage{
+				Action:         "action",
 				ForwardedHost:  "forwarded_host",
 				ForwardedProto: "forwarded_proto",
 			},
-			errors.New("missing headers: [X-Action]"),
+			errors.New("missing headers: [X-Local-RemoteAddr]"),
+		},
+		{
+			&ControlMessage{
+				ForwardedHost:  "forwarded_host",
+				ForwardedProto: "forwarded_proto",
+			},
+			errors.New("missing headers: [X-Local-RemoteAddr X-Action]"),
 		},
 		{
 			&ControlMessage{
 				Action:        "action",
 				ForwardedHost: "forwarded_host",
 			},
-			errors.New("missing headers: [X-Forwarded-Proto]"),
+			errors.New("missing headers: [X-Local-RemoteAddr X-Forwarded-Proto]"),
 		},
 		{
 			&ControlMessage{
 				Action:         "action",
 				ForwardedProto: "forwarded_proto",
 			},
-			errors.New("missing headers: [X-Forwarded-Host]"),
+			errors.New("missing headers: [X-Local-RemoteAddr X-Forwarded-Host]"),
 		},
 	}
 

@@ -13,6 +13,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,7 +26,7 @@ import (
 
 // ServerConfig defines configuration for the Server.
 type ServerConfig struct {
-	// Addr is TCP address to listen for client connections. If empty ":0"
+	// RemoteAddr is TCP address to listen for controller connections. If empty ":0"
 	// is used.
 	Addr string
 	// AutoSubscribe if enabled will automatically subscribe new clients on
@@ -33,14 +34,16 @@ type ServerConfig struct {
 	AutoSubscribe bool
 	// TLSConfig specifies the tls configuration to use with tls.Listener.
 	TLSConfig *tls.Config
-	// Listener specifies optional listener for client connections. If nil
-	// tls.Listen("tcp", Addr, TLSConfig) is used.
+	// Listener specifies optional listener for controller connections. If nil
+	// tls.Listen("tcp", RemoteAddr, TLSConfig) is used.
 	Listener net.Listener
 	// Logger is optional logger. If nil logging is disabled.
 	Logger log.Logger
+	// RegisteredClient get
+	RegisteredClientsProvider RegisteredClientsProvider
 }
 
-// Server is responsible for proxying public connections to the client over a
+// Server is responsible for proxying public connections to the controller over a
 // tunnel connection.
 type Server struct {
 	*registry
@@ -91,7 +94,7 @@ func listener(config *ServerConfig) (net.Listener, error) {
 	}
 
 	if config.Addr == "" {
-		return nil, errors.New("missing Addr")
+		return nil, errors.New("missing RemoteAddr")
 	}
 	if config.TLSConfig == nil {
 		return nil, errors.New("missing TLSConfig")
@@ -100,8 +103,8 @@ func listener(config *ServerConfig) (net.Listener, error) {
 	return net.Listen("tcp", config.Addr)
 }
 
-// disconnected clears resources used by client, it's invoked by connection pool
-// when client goes away.
+// disconnected clears resources used by controller, it's invoked by connection pool
+// when controller goes away.
 func (s *Server) disconnected(identifier id.ID) {
 	s.logger.Log(
 		"level", 1,
@@ -165,11 +168,11 @@ func (s *Server) Start() {
 			)
 		}
 
-		go s.handleClient(tls.Server(conn, s.config.TLSConfig))
+		go s.handleClient(tls.Server(conn, s.config.TLSConfig), true)
 	}
 }
 
-func (s *Server) handleClient(conn net.Conn) {
+func (s *Server) handleClient(conn net.Conn, main bool) {
 	logger := log.NewContext(s.logger).With("addr", conn.RemoteAddr())
 
 	logger.Log(
@@ -178,46 +181,84 @@ func (s *Server) handleClient(conn net.Conn) {
 	)
 
 	var (
-		identifier id.ID
+		err        error
+		inConnPool bool
+		ok         bool
+		ID         id.ID
+		cfg        *RegisteredClientConfig
+		clientInfo *RegisteredClientInfo
+		controller *clientConnectionController
+		body       io.Reader
 		req        *http.Request
 		resp       *http.Response
-		tunnels    map[string]*proto.Tunnel
-		err        error
-		ok         bool
-
-		inConnPool bool
+		tlsConn    *tls.Conn
+		ccon       *clientConnection
 	)
 
-	tlsConn, ok := conn.(*tls.Conn)
-	if !ok {
+	if tlsConn, ok = conn.(*tls.Conn); !ok {
 		logger.Log(
 			"level", 0,
 			"msg", "invalid connection type",
-			"err", fmt.Errorf("expected TLS conn, got %T", conn),
+			"err", fmt.Errorf("expected TLS controller, got %T", conn),
 		)
-		goto reject
+		goto Reject
 	}
 
-	identifier, err = id.PeerID(tlsConn)
+	ID, err = id.PeerID(tlsConn)
 	if err != nil {
 		logger.Log(
 			"level", 2,
 			"msg", "certificate error",
 			"err", err,
 		)
-		goto reject
+		goto Reject
 	}
 
-	logger = logger.With("identifier", identifier)
+	logger = logger.With("identifier", ID)
 
 	if s.config.AutoSubscribe {
-		s.Subscribe(identifier)
-	} else if !s.IsSubscribed(identifier) {
+		s.Subscribe(ID)
+	} else if s.config.RegisteredClientsProvider != nil {
+		if cfg, err = s.config.RegisteredClientsProvider.Get(ID); err == nil {
+			if cfg.Disabled {
+				logger.Log(
+					"level", 2,
+					"msg", "Client has be disabled",
+				)
+				goto Reject
+			}
+			if s.connPool.Has(ID) {
+				if ccon, err = s.connPool.AddClientConnection(ID, conn); err != nil {
+					goto Reject
+				}
+				logger.Log(
+					"level", 1,
+					"msg", fmt.Sprintf("new connection #%d for client added", ccon.id),
+				)
+				return
+			} else {
+				s.Subscribe(ID)
+			}
+		} else if IsNotRegistered(err) {
+			logger.Log(
+				"level", 2,
+				"msg", err.Error(),
+			)
+			goto Reject
+		} else {
+			logger.Log(
+				"level", 2,
+				"msg", "Get registered controller failed",
+				"err", err,
+			)
+			goto Reject
+		}
+	} else if !s.IsSubscribed(ID) {
 		logger.Log(
 			"level", 2,
-			"msg", "unknown client",
+			"msg", "unknown controller",
 		)
-		goto reject
+		goto Reject
 	}
 
 	if err = conn.SetDeadline(time.Time{}); err != nil {
@@ -226,43 +267,52 @@ func (s *Server) handleClient(conn net.Conn) {
 			"msg", "setting infinite deadline failed",
 			"err", err,
 		)
-		goto reject
+		goto Reject
 	}
 
-	if err := s.connPool.AddConn(conn, identifier); err != nil {
+	controller = &clientConnectionController{cfg, conn, ID, logger}
+
+	if err := s.connPool.AddConn(controller); err != nil {
 		logger.Log(
 			"level", 2,
 			"msg", "adding connection failed",
 			"err", err,
 		)
-		goto reject
+		goto Reject
 	}
+
 	inConnPool = true
 
-	req, err = http.NewRequest(http.MethodConnect, s.connPool.URL(identifier), nil)
+	req, err = s.connPool.newRequest(http.MethodConnect, controller.ID, body)
 	if err != nil {
 		logger.Log(
 			"level", 2,
 			"msg", "handshake request creation failed",
 			"err", err,
 		)
-		goto reject
+		goto Reject
+	}
+
+	if cfg != nil && cfg.Connections > 0 {
+		req.Header.Set(HeaderConnectionsCount, strconv.Itoa(int(controller.cfg.Connections)))
 	}
 
 	{
-		ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
+		ctx, cancel := context.WithTimeout(req.Context(), DefaultTimeout)
 		defer cancel()
 		req = req.WithContext(ctx)
 	}
 
 	resp, err = s.httpClient.Do(req)
+	defer s.connPool.closeReqConn(req)
+
 	if err != nil {
 		logger.Log(
 			"level", 2,
 			"msg", "handshake failed",
 			"err", err,
 		)
-		goto reject
+		goto Reject
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -272,7 +322,7 @@ func (s *Server) handleClient(conn net.Conn) {
 			"msg", "handshake failed",
 			"err", err,
 		)
-		goto reject
+		goto Reject
 	}
 
 	if resp.ContentLength == 0 {
@@ -282,35 +332,68 @@ func (s *Server) handleClient(conn net.Conn) {
 			"msg", "handshake failed",
 			"err", err,
 		)
-		goto reject
+		goto Reject
 	}
 
-	if err = json.NewDecoder(&io.LimitedReader{R: resp.Body, N: 126976}).Decode(&tunnels); err != nil {
-		logger.Log(
-			"level", 2,
-			"msg", "handshake failed",
-			"err", err,
-		)
-		goto reject
+	if cfg == nil {
+		cfg = &RegisteredClientConfig{}
+		if err = json.NewDecoder(&io.LimitedReader{R: resp.Body, N: 126976}).Decode(cfg); err != nil {
+			logger.Log(
+				"level", 2,
+				"msg", "handshake failed",
+				"err", err,
+			)
+			goto Reject
+		}
+		// Ony main connection
+		cfg.Connections = 0
+	} else {
+		clientInfo = &RegisteredClientInfo{}
+		if err = json.NewDecoder(&io.LimitedReader{R: resp.Body, N: 126976}).Decode(clientInfo); err != nil {
+			logger.Log(
+				"level", 2,
+				"msg", "handshake failed",
+				"err", err,
+			)
+			goto Reject
+		}
+
+		cfg.Hostname = clientInfo.Hostname
+		for name, ct := range clientInfo.Tunnels {
+			if t, ok := cfg.Tunnels[name]; ok {
+				if ct.Disabled {
+					t.Disabled = true
+				} else {
+					t.LocalAddr = ct.LocalAddr
+					t.Auth = ct.Auth
+				}
+			} else {
+				logger.Log(
+					"level", 1,
+					"msg", fmt.Sprintf("tunnel %q not registered", name),
+				)
+				delete(clientInfo.Tunnels, name)
+			}
+		}
 	}
 
-	if len(tunnels) == 0 {
+	if len(cfg.Tunnels) == 0 {
 		err = fmt.Errorf("No tunnels")
 		logger.Log(
 			"level", 2,
 			"msg", "handshake failed",
 			"err", err,
 		)
-		goto reject
+		goto Reject
 	}
 
-	if err = s.addTunnels(tunnels, identifier); err != nil {
+	if err = s.addTunnels(cfg.Tunnels, ID); err != nil {
 		logger.Log(
 			"level", 2,
 			"msg", "handshake failed",
 			"err", err,
 		)
-		goto reject
+		goto Reject
 	}
 
 	logger.Log(
@@ -319,32 +402,31 @@ func (s *Server) handleClient(conn net.Conn) {
 	)
 
 	return
-
-reject:
+Reject:
 	logger.Log(
 		"level", 1,
 		"action", "rejected",
 	)
 
 	if inConnPool {
-		s.notifyError(err, identifier)
-		s.connPool.DeleteConn(identifier)
+		s.notifyError(err, ID)
+		s.connPool.DeleteConn(ID)
 	}
 
 	conn.Close()
 }
 
-// notifyError tries to send error to client.
+// notifyError tries to send error to controller.
 func (s *Server) notifyError(serverError error, identifier id.ID) {
 	if serverError == nil {
 		return
 	}
 
-	req, err := http.NewRequest(http.MethodConnect, s.connPool.URL(identifier), nil)
+	req, err := s.connPool.newRequest(http.MethodConnect, identifier, nil)
 	if err != nil {
 		s.logger.Log(
 			"level", 2,
-			"action", "client error notification failed",
+			"action", "controller error notification failed",
 			"identifier", identifier,
 			"err", err,
 		)
@@ -364,17 +446,21 @@ func (s *Server) notifyError(serverError error, identifier id.ID) {
 func (s *Server) addTunnels(tunnels map[string]*proto.Tunnel, identifier id.ID) error {
 	i := &RegistryItem{
 		Hosts:     []*HostAuth{},
-		Listeners: []net.Listener{},
+		Listeners: []*Listener{},
 	}
 
 	var err error
 	for name, t := range tunnels {
+		if t.Disabled {
+			continue
+		}
+
 		switch t.Protocol {
 		case proto.HTTP:
-			i.Hosts = append(i.Hosts, &HostAuth{t.Host, NewAuth(t.Auth)})
+			i.Hosts = append(i.Hosts, &HostAuth{t, NewAuth(t.Auth)})
 		case proto.TCP, proto.TCP4, proto.TCP6, proto.UNIX:
 			var l net.Listener
-			l, err = net.Listen(t.Protocol, t.Addr)
+			l, err = net.Listen(t.Protocol, t.RemoteAddr)
 			if err != nil {
 				goto rollback
 			}
@@ -386,7 +472,7 @@ func (s *Server) addTunnels(tunnels map[string]*proto.Tunnel, identifier id.ID) 
 				"addr", l.Addr(),
 			)
 
-			i.Listeners = append(i.Listeners, l)
+			i.Listeners = append(i.Listeners, &Listener{l, t})
 		default:
 			err = fmt.Errorf("unsupported protocol for tunnel %s: %s", name, t.Protocol)
 			goto rollback
@@ -412,7 +498,7 @@ rollback:
 	return err
 }
 
-// Unsubscribe removes client from registry, disconnects client if already
+// Unsubscribe removes controller from registry, disconnects controller if already
 // connected and returns it's RegistryItem.
 func (s *Server) Unsubscribe(identifier id.ID) *RegistryItem {
 	s.connPool.DeleteConn(identifier)
@@ -424,7 +510,7 @@ func (s *Server) Ping(identifier id.ID) (time.Duration, error) {
 	return s.connPool.Ping(identifier)
 }
 
-func (s *Server) listen(l net.Listener, identifier id.ID) {
+func (s *Server) listen(l *Listener, identifier id.ID) {
 	addr := l.Addr().String()
 
 	for {
@@ -451,6 +537,7 @@ func (s *Server) listen(l net.Listener, identifier id.ID) {
 		}
 
 		msg := &proto.ControlMessage{
+			LocalAddr:      l.Tunnel.LocalAddr,
 			Action:         proto.ActionProxy,
 			ForwardedHost:  l.Addr().String(),
 			ForwardedProto: l.Addr().Network(),
@@ -480,7 +567,7 @@ func (s *Server) listen(l net.Listener, identifier id.ID) {
 	}
 }
 
-// ServeHTTP proxies http connection to the client.
+// ServeHTTP proxies http connection to the controller.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resp, err := s.RoundTrip(r)
 	if err == errUnauthorised {
@@ -507,7 +594,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(resp.StatusCode)
 
 	transfer(w, resp.Body, log.NewContext(s.logger).With(
-		"dir", "client to user",
+		"dir", "controller to user",
 		"dst", r.RemoteAddr,
 		"src", r.Host,
 	))
@@ -515,7 +602,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // RoundTrip is http.RoundTriper implementation.
 func (s *Server) RoundTrip(r *http.Request) (*http.Response, error) {
-	identifier, auth, ok := s.Subscriber(r.Host)
+	identifier, hostInfo, ok := s.Subscriber(r.Host)
 	if !ok {
 		return nil, errClientNotSubscribed
 	}
@@ -526,9 +613,9 @@ func (s *Server) RoundTrip(r *http.Request) (*http.Response, error) {
 	}
 	outr.Header = cloneHeader(r.Header)
 
-	if auth != nil {
+	if hostInfo.auth != nil {
 		user, password, _ := r.BasicAuth()
-		if auth.User != user || auth.Password != password {
+		if hostInfo.auth.User != user || hostInfo.auth.Password != password {
 			return nil, errUnauthorised
 		}
 		outr.Header.Del("Authorization")
@@ -550,6 +637,7 @@ func (s *Server) RoundTrip(r *http.Request) (*http.Response, error) {
 	}
 
 	msg := &proto.ControlMessage{
+		LocalAddr:      hostInfo.tunnel.LocalAddr,
 		Action:         proto.ActionProxy,
 		ForwardedHost:  r.Host,
 		ForwardedProto: scheme,
@@ -561,7 +649,7 @@ func (s *Server) RoundTrip(r *http.Request) (*http.Response, error) {
 func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMessage) error {
 	s.logger.Log(
 		"level", 2,
-		"action", "proxy conn",
+		"action", "proxy controller",
 		"identifier", identifier,
 		"ctrlMsg", msg,
 	)
@@ -576,14 +664,15 @@ func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMe
 	if err != nil {
 		return err
 	}
+	defer s.connPool.closeReqConn(req)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(req.Context())
 	req = req.WithContext(ctx)
 
 	done := make(chan struct{})
 	go func() {
 		transfer(pw, conn, log.NewContext(s.logger).With(
-			"dir", "user to client",
+			"dir", "user to controller",
 			"dst", identifier,
 			"src", conn.RemoteAddr(),
 		))
@@ -595,10 +684,11 @@ func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMe
 	if err != nil {
 		return fmt.Errorf("io error: %s", err)
 	}
+
 	defer resp.Body.Close()
 
 	transfer(conn, resp.Body, log.NewContext(s.logger).With(
-		"dir", "client to user",
+		"dir", "controller to user",
 		"dst", conn.RemoteAddr(),
 		"src", identifier,
 	))
@@ -607,7 +697,7 @@ func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMe
 
 	s.logger.Log(
 		"level", 2,
-		"action", "proxy conn done",
+		"action", "proxy controller done",
 		"identifier", identifier,
 		"ctrlMsg", msg,
 	)
@@ -631,6 +721,7 @@ func (s *Server) proxyHTTP(identifier id.ID, r *http.Request, msg *proto.Control
 	if err != nil {
 		return nil, fmt.Errorf("proxy request error: %s", err)
 	}
+	defer s.connPool.closeReqConn(req)
 
 	go func() {
 		cw := &countWriter{pw, 0}
@@ -650,7 +741,7 @@ func (s *Server) proxyHTTP(identifier id.ID, r *http.Request, msg *proto.Control
 			"action", "transferred",
 			"identifier", identifier,
 			"bytes", cw.count,
-			"dir", "user to client",
+			"dir", "user to controller",
 			"dst", r.Host,
 			"src", r.RemoteAddr,
 		)
@@ -676,11 +767,11 @@ func (s *Server) proxyHTTP(identifier id.ID, r *http.Request, msg *proto.Control
 	return resp, nil
 }
 
-// connectRequest creates HTTP request to client with a given identifier having
+// connectRequest creates HTTP request to controller with a given identifier having
 // control message and data input stream, output data stream results from
 // response the created request.
 func (s *Server) connectRequest(identifier id.ID, msg *proto.ControlMessage, r io.Reader) (*http.Request, error) {
-	req, err := http.NewRequest(http.MethodPut, s.connPool.URL(identifier), r)
+	req, err := s.connPool.newRequest(http.MethodPut, identifier, r)
 	if err != nil {
 		return nil, fmt.Errorf("could not create request: %s", err)
 	}
