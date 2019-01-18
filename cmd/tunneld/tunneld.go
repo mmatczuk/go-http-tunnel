@@ -122,12 +122,14 @@ func tlsConfig(opts *options) (*tls.Config, error) {
 	}
 
 	return &tls.Config{
-		Certificates:             []tls.Certificate{cert},
-		ClientAuth:               clientAuth,
-		ClientCAs:                roots,
-		SessionTicketsDisabled:   true,
-		MinVersion:               tls.VersionTLS12,
-		CipherSuites:             []uint16{tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256},
+		Certificates:           []tls.Certificate{cert},
+		ClientAuth:             clientAuth,
+		ClientCAs:              roots,
+		SessionTicketsDisabled: true,
+		MinVersion:             tls.VersionTLS12,
+		CipherSuites: []uint16{
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256},
 		PreferServerCipherSuites: true,
 		NextProtos:               []string{"h2"},
 	}, nil
