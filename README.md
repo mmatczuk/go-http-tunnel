@@ -67,6 +67,65 @@ $ tunneld -tlsCrt .tunneld/server.crt -tlsKey .tunneld/server.key
 
 This will run HTTP server on port `80` and HTTPS (HTTP/2) server on port `443`. If you want to use HTTPS it's recommended to get a properly signed certificate to avoid security warnings.
 
+###Run Server as a Service on Ubuntu using Systemd:
+
+* After completing the steps above successfully, create a new file for your service (you can name it whatever you want, just replace the name below with your chosen name).
+
+``` bash
+$ vim tunneld.service
+```
+
+* Add the following configuration to the file
+
+```
+[Unit]
+Description=Go-Http-Tunnel Service
+After=network.target
+After=network-online.target
+
+[Service]
+ExecStart=/path/to/your/tunneld -tlsCrt /path/to/your/folder/.tunneld/server.crt -tlsKey /path/to/your/folder/.tunneld/server.key
+TimeoutSec=30
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+```
+
+* Save and exit this file.
+* Move this new file to /etc/systemd/system/
+
+```bash
+$ sudo mv tunneld.service /etc/systemd/system/
+```
+
+* Change the file permission to allow it to run.
+
+```bash
+$ sudo chmod u+x /etc/systemd/system/tunneld.service
+```
+
+* Start the new service and make sure you don't get any errors, and that your client is able to connect.
+
+```bash
+$ sudo systemctl start tunneld.service
+```
+
+* You can stop the service with:
+
+```bash
+$ sudo systemctl stop tunneld.service
+```
+
+* Finally, if you want the service to start automatically when the server is rebooted, you need to enable it.
+
+```bash
+$ sudo systemctl enable tunneld.service
+```
+
+There are many more options for systemd services, and this is by not means an exhaustive configuration file.
+
 ## Configuration
 
 The tunnel client `tunnel` requires configuration file, by default it will try reading `tunnel.yml` in your current working directory. If you want to specify other file use `-config` flag.
