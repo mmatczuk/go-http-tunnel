@@ -1,3 +1,10 @@
+
+GO_FILES := $(shell \
+	find . '(' -path '*/.*' -o -path './vendor' ')' -prune \
+	-o -name '*.go' -print | cut -b3-)
+
+LINT_IGNORE := "/id/\|/tunnelmock/\|/vendor/"
+
 all: clean check test
 
 .PHONY: clean
@@ -13,7 +20,10 @@ check: .check-fmt .check-vet .check-lint .check-ineffassign .check-static .check
 
 .PHONY: .check-fmt
 .check-fmt:
-	@go fmt ./... | tee /dev/stderr | ifne false
+	$(eval FMT_LOG := $(shell mktemp -t gofmt.XXXXX))
+	@cat /dev/null > $(FMT_LOG)
+	@gofmt -e -s -l -d $(GO_FILES) > $(FMT_LOG) || true
+	@[ ! -s "$(FMT_LOG)" ] || (echo "$@ failed:" | cat - $(FMT_LOG) && false)
 
 .PHONY: .check-vet
 .check-vet:
@@ -21,10 +31,11 @@ check: .check-fmt .check-vet .check-lint .check-ineffassign .check-static .check
 
 .PHONY: .check-lint
 .check-lint:
-	@golint `go list ./...` \
-	| grep -v /id/ \
-	| grep -v /tunnelmock/ \
-	| tee /dev/stderr | ifne false
+	$(eval LINT_LOG := $(shell mktemp -t golint.XXXXX))
+	@cat /dev/null > $(LINT_LOG)
+	@$(foreach pkg, $(GO_FILES), golint $(pkg | grep -v $LINT_IGNORE) >> $(LINT_LOG) || true;)
+	@[ ! -s "$(LINT_LOG)" ] || (echo "$@ failed:" | cat - $(LINT_LOG) && false)
+
 
 .PHONY: .check-ineffassign
 .check-ineffassign:
@@ -36,7 +47,7 @@ check: .check-fmt .check-vet .check-lint .check-ineffassign .check-static .check
 
 .PHONY: .check-mega
 .check-static:
-	@staticcheck ./...
+	@staticcheck -checks ['SA1006','ST1005'] ./...
 
 .PHONY: .check-vendor
 .check-vendor:
