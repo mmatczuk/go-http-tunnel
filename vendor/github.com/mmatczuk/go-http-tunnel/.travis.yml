@@ -1,0 +1,15 @@
+language: go
+go:
+  - 1.x
+
+addons:
+  apt:
+    packages:
+    - moreutils
+
+install:
+  - make get-tools
+  - make get-deps
+
+script:
+  - make
