@@ -56,7 +56,7 @@ get-deps:
 get-tools:
 	@echo "==> Installing tools..."
 	@go get -u github.com/golang/dep/cmd/dep
-	@go get -u github.com/golang/lint/golint
+	@go get -u golang.org/x/lint/golint
 	@go get -u github.com/golang/mock/gomock
 
 	@go get -u github.com/client9/misspell/cmd/misspell
