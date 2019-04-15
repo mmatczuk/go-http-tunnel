@@ -13,5 +13,9 @@ install:
 
 script:
   - make
-  - make build
-  - make package
+
+jobs:
+  include:
+    - stage: Build Tests
+      install: make get-tools && make get-deps
+      script: make build && make package
