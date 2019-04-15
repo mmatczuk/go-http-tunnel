@@ -16,17 +16,21 @@ install:
   - make get-tools
   - make get-deps
 
-script:
-  - make
+# script:
+#   - make
 
 stages:
+    - name: build
     - name: test
 
 jobs:
   include:
     - stage: test
+      name: "Check Tests"
+      script: make
+    - stage: build
       name: "Build Tests"
-      install: make get-tools && make get-deps
+      # install: make get-tools && make get-deps
       script: make build && make package
       # TODO: publish after success only on tag
       # after_success:
