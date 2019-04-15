@@ -1,6 +1,11 @@
 language: go
+
 go:
   - 1.x
+
+branches:
+  only:
+  - master
 
 addons:
   apt:
@@ -13,6 +18,9 @@ install:
 
 script:
   - make
+
+stages:
+    - name: test
 
 jobs:
   include:
