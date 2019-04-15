@@ -13,3 +13,5 @@ install:
 
 script:
   - make
+  - make build
+  - make package
