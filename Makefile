@@ -1,3 +1,5 @@
+GOVERSION = $(shell go version)
+GOOS = $(word 1,$(subst /, ,$(lastword $(GOVERSION))))
 
 GO_FILES := $(shell \
 	find . '(' -path '*/.*' -o -path './vendor' ')' -prune \
@@ -87,16 +89,16 @@ release: check test clean build package
 
 .PHONY: build
 build:
-	mkdir ${OUTPUT_DIR}
+	mkdir -p ${OUTPUT_DIR}
 	CGO_ENABLED=0 GOARM=5 gox -ldflags "-w -X main.version=$(GIT_COMMIT)" \
 	-os=${OS} -arch=${ARCH} -osarch=${OSARCH} -output "${OUTPUT_DIR}/pkg/{{.OS}}_{{.Arch}}/{{.Dir}}" \
 	./cmd/tunnel ./cmd/tunneld
 
 .PHONY: package
 package:
-	mkdir ${OUTPUT_DIR}/dist
+	mkdir -p ${OUTPUT_DIR}/dist
 	cd ${OUTPUT_DIR}/pkg/; for osarch in *; do (cd $$osarch; tar zcvf ../../dist/tunnel_$$osarch.tar.gz ./*); done;
-	cd ${OUTPUT_DIR}/dist; sha256sum * > ./SHA256SUMS
+	cd ${OUTPUT_DIR}/dist; [ "$(GOOS)" == "darwin" ] || (sha256sum * > ./SHA256SUMS) && (shasum -a 256 * > ./SHA256SUMS)
 
 .PHONY: publish
 publish:
