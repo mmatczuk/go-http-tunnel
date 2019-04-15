@@ -111,7 +111,7 @@ package:
 	cd ${OUTPUT_DIR}/dist; $(SHA256) * > ./SHA256SUMS
 
 .PHONY: tags
-tags:
+tags: ; @ ## Used only for informations
 	@git log --simplify-by-decoration --decorate --pretty=oneline | fgrep 'tag: '
 
 .PHONY: publish
