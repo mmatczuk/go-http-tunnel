@@ -16,6 +16,12 @@ script:
 
 jobs:
   include:
-    - stage: Build Tests
+    - stage: test
+      name: "Build Tests"
       install: make get-tools && make get-deps
       script: make build && make package
+      # TODO: publish after success only on tag
+      # after_success:
+      #   - if [[ "$TRAVIS_BRANCH" == "master" ]]; then
+      #        make publish
+      #     fi

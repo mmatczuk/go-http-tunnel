@@ -1,5 +1,10 @@
-GOVERSION = $(shell go version)
-GOOS = $(word 1,$(subst /, ,$(lastword $(GOVERSION))))
+UNAME := $(shell uname -s)
+
+ifeq ($(UNAME),Darwin)
+	SHA256 := shasum -a 256
+else
+	SHA256 := sha256sum
+endif
 
 GO_FILES := $(shell \
 	find . '(' -path '*/.*' -o -path './vendor' ')' -prune \
@@ -98,7 +103,7 @@ build:
 package:
 	mkdir -p ${OUTPUT_DIR}/dist
 	cd ${OUTPUT_DIR}/pkg/; for osarch in *; do (cd $$osarch; tar zcvf ../../dist/tunnel_$$osarch.tar.gz ./*); done;
-	cd ${OUTPUT_DIR}/dist; [ "$(GOOS)" == "darwin" ] || (sha256sum * > ./SHA256SUMS) && (shasum -a 256 * > ./SHA256SUMS)
+	cd ${OUTPUT_DIR}/dist; $(SHA256) * > ./SHA256SUMS
 
 .PHONY: publish
 publish:
