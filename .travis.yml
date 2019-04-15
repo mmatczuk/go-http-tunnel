@@ -16,24 +16,27 @@ install:
   - make get-tools
   - make get-deps
 
-# script:
-#   - make
-
 stages:
-    - name: test
-    - name: build
+  - name: test
+  - name: build
 
 jobs:
+  # INFO: Stop stages if stage test fail
+  fast_finish: true
   include:
     - stage: test
       name: "Check Tests"
       script: make
     - stage: build
       name: "Build Tests"
-      # install: make get-tools && make get-deps
       script: make build && make package
       # TODO: publish after success only on tag
       # after_success:
       #   - if [[ "$TRAVIS_BRANCH" == "master" ]]; then
       #        make publish
       #     fi
+
+notifications:
+  email:
+    on_success: never
+    on_failure: always
