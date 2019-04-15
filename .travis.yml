@@ -20,8 +20,8 @@ install:
 #   - make
 
 stages:
-    - name: build
     - name: test
+    - name: build
 
 jobs:
   include:
