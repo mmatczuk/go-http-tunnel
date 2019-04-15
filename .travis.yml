@@ -27,7 +27,7 @@ jobs:
   include:
     - stage: test
       name: "Check Tests"
-      script: make
+      script: make && sh fail
     - stage: build
       name: "Build Tests"
       script: make build && make package
