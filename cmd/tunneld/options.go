@@ -16,9 +16,9 @@ options:
 
 const usage2 string = `
 Example:
-	tuneld
-	tuneld -clients YMBKT3V-ESUTZ2Z-7MRILIJ-T35FHGO-D2DHO7D-FXMGSSR-V4LBSZX-BNDONQ4
-	tuneld -httpAddr :8080 -httpsAddr ""
+	tunneld
+	tunneld -clients YMBKT3V-ESUTZ2Z-7MRILIJ-T35FHGO-D2DHO7D-FXMGSSR-V4LBSZX-BNDONQ4
+	tunneld -httpAddr :8080 -httpsAddr ""
 
 Author:
 	Written by M. Matczuk (mmatczuk@gmail.com)
