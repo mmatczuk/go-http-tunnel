@@ -44,3 +44,7 @@
 [[constraint]]
   branch = "master"
   name = "github.com/felixge/tcpkeepalive"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/inconshreveable/go-vhost"
