@@ -6,6 +6,7 @@ Features:
 
 * HTTP proxy with [basic authentication](https://en.wikipedia.org/wiki/Basic_access_authentication)
 * TCP proxy
+* [SNI](https://en.wikipedia.org/wiki/Server_Name_Indication) vhost proxy
 * Client auto reconnect
 * Client management and eviction
 * Easy to use CLI
@@ -149,6 +150,10 @@ looks like this
         proto: tcp
         addr: 192.168.0.5:22
         remote_addr: 0.0.0.0:22
+      tls:
+  	    proto: sni
+  	    addr: localhost:443
+  	    host: tls.my-tunnel-host.com
 ```
 
 Configuration options:
@@ -158,10 +163,10 @@ Configuration options:
 * `tls_key`: path to client TLS certificate key, *default:* `client.key` *in the config file directory*
 * `root_ca`: path to trusted root certificate authority pool file, if empty any server certificate is accepted
 *  `tunnels / [name]`
-    * `proto`: tunnel protocol, `http` or `tcp`
+    * `proto`: tunnel protocol, `http`, `tcp` or `sni`
     * `addr`: forward traffic to this local port number or network address, for `proto=http` this can be full URL i.e. `https://machine/sub/path/?plus=params`, supports URL schemes `http` and `https`
     * `auth`: (`proto=http`) (optional) basic authentication credentials to enforce on tunneled requests, format `user:password`
-    * `host`: (`proto=http`) hostname to request (requires reserved name and DNS CNAME)
+    * `host`: (`proto=http`, `proto=sni`) hostname to request (requires reserved name and DNS CNAME)
     * `remote_addr`: (`proto=tcp`) bind the remote TCP address
 * `backoff`
     * `interval`: how long client would wait before redialing the server if connection was lost, exponential backoff initial interval, *default:* `500ms`
