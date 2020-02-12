@@ -2,110 +2,50 @@
 
 
 [[projects]]
-  digest = "1:d7c5f0bac5337c5098b18d000ee24a9a58d10a6b98824cd1821af74d7219ebea"
   name = "github.com/calmh/luhn"
   packages = ["."]
-  pruneopts = ""
   revision = "5b2abb343e70180dbf456397c5fd93f14471b08e"
   version = "v2.0.0"
 
 [[projects]]
-  digest = "1:59df7ab87ddca233bb586ff32c6feba12bf787260f6694dc45ceecea9d3e1a7e"
   name = "github.com/cenkalti/backoff"
   packages = ["."]
-  pruneopts = ""
-  revision = "1e4cf3da559842a91afcb6ea6141451e6c30c618"
-  version = "v2.1.1"
+  revision = "61153c768f31ee5f130071d08fc82b85208528de"
+  version = "v1.1.0"
 
 [[projects]]
   branch = "master"
-  digest = "1:50cf302cc52eb618cec25d4daf167ed5593145d43b447b906a9f0d24e271d48b"
   name = "github.com/felixge/tcpkeepalive"
   packages = ["."]
-  pruneopts = ""
   revision = "5bb0b2dea91e0de550022159b9571aafc72c08ba"
 
 [[projects]]
-  digest = "1:530233672f656641b365f8efb38ed9fba80e420baff2ce87633813ab3755ed6d"
   name = "github.com/golang/mock"
   packages = ["gomock"]
-  pruneopts = ""
-  revision = "51421b967af1f557f93a59e0057aaf15ca02e29c"
-  version = "v1.2.0"
-
-[[projects]]
-  digest = "1:3a86b4526cc15ca4caf041c7f6943b59b3eb3711a9bc832de27b0801b826e019"
-  name = "github.com/mmatczuk/go-http-tunnel"
-  packages = [
-    ".",
-    "id",
-    "log",
-    "proto",
-    "tunnelmock",
-  ]
-  pruneopts = ""
-  revision = "75a30abccc8db9d1149845e9985e80cca57758a2"
-  version = "2.1"
+  revision = "13f360950a79f5864a972c786a10a50e44b69541"
+  version = "v1.0.0"
 
 [[projects]]
   branch = "master"
-  digest = "1:1285570ced192ee4703ca44573a4eaf19b5a0895af56f9db2210b171eefd2a41"
   name = "golang.org/x/net"
-  packages = [
-    "http2",
-    "http2/hpack",
-    "idna",
-    "lex/httplex",
-  ]
-  pruneopts = ""
+  packages = ["context","http2","http2/hpack","idna","lex/httplex"]
   revision = "c7086645de248775cbf2373cf5ca4d2fa664b8c1"
 
 [[projects]]
   branch = "master"
-  digest = "1:39a1a71adca4b837a25dc6b5fcdd9d175e4597c6d3440f107dfeda31230218e4"
   name = "golang.org/x/text"
-  packages = [
-    "collate",
-    "collate/build",
-    "internal/colltab",
-    "internal/gen",
-    "internal/tag",
-    "internal/triegen",
-    "internal/ucd",
-    "language",
-    "secure/bidirule",
-    "transform",
-    "unicode/bidi",
-    "unicode/cldr",
-    "unicode/norm",
-    "unicode/rangetable",
-  ]
-  pruneopts = ""
+  packages = ["collate","collate/build","internal/colltab","internal/gen","internal/tag","internal/triegen","internal/ucd","language","secure/bidirule","transform","unicode/bidi","unicode/cldr","unicode/norm","unicode/rangetable"]
   revision = "88f656faf3f37f690df1a32515b479415e1a6769"
 
 [[projects]]
-  digest = "1:cedccf16b71e86db87a24f8d4c70b0a855872eb967cb906a66b95de56aefbd0d"
+  branch = "v2"
   name = "gopkg.in/yaml.v2"
   packages = ["."]
-  pruneopts = ""
-  revision = "51d6538a90f86fe93ac480b35f37b2be17fef232"
-  version = "v2.2.2"
+  revision = "287cf08546ab5e7e37d55a84f7ed3fd1db036de5"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  input-imports = [
-    "github.com/calmh/luhn",
-    "github.com/cenkalti/backoff",
-    "github.com/felixge/tcpkeepalive",
-    "github.com/golang/mock/gomock",
-    "github.com/mmatczuk/go-http-tunnel",
-    "github.com/mmatczuk/go-http-tunnel/id",
-    "github.com/mmatczuk/go-http-tunnel/log",
-    "github.com/mmatczuk/go-http-tunnel/proto",
-    "github.com/mmatczuk/go-http-tunnel/tunnelmock",
-    "golang.org/x/net/http2",
-    "gopkg.in/yaml.v2",
-  ]
+  inputs-digest = "654fea302b8b5a71ce4f36f4097d0c0caa8150e46109cfbdd462adcd054a6768"
   solver-name = "gps-cdcl"
   solver-version = 1

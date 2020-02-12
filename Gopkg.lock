@@ -34,16 +34,7 @@
   version = "v1.2.0"
 
 [[projects]]
-  branch = "master"
-  digest = "1:e2d808cdb7eda4933f1b22f6747bd0b8dbbf79744c272500ce0c49ef58d31c96"
-  name = "github.com/inconshreveable/go-vhost"
-  packages = ["."]
-  pruneopts = ""
-  revision = "06d84117953b22058c096b49a429ebd4f3d3d97b"
-
-[[projects]]
-  branch = "master"
-  digest = "1:a5b782c76280477562569308f47c8146626370d4a4657b78fc16b92c17afd8a6"
+  digest = "1:3a86b4526cc15ca4caf041c7f6943b59b3eb3711a9bc832de27b0801b826e019"
   name = "github.com/mmatczuk/go-http-tunnel"
   packages = [
     ".",
@@ -53,8 +44,8 @@
     "tunnelmock",
   ]
   pruneopts = ""
-  revision = "f48a09d2ab15c6f4fcbeec67864d39a584f22b30"
-  source = "github.com/mmatczuk/go-http-tunnel"
+  revision = "75a30abccc8db9d1149845e9985e80cca57758a2"
+  version = "2.1"
 
 [[projects]]
   branch = "master"
@@ -108,7 +99,6 @@
     "github.com/cenkalti/backoff",
     "github.com/felixge/tcpkeepalive",
     "github.com/golang/mock/gomock",
-    "github.com/inconshreveable/go-vhost",
     "github.com/mmatczuk/go-http-tunnel",
     "github.com/mmatczuk/go-http-tunnel/id",
     "github.com/mmatczuk/go-http-tunnel/log",

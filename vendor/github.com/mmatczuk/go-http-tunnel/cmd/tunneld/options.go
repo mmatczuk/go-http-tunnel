@@ -16,10 +16,9 @@ options:
 
 const usage2 string = `
 Example:
-	tunneld
-	tunneld -clients YMBKT3V-ESUTZ2Z-7MRILIJ-T35FHGO-D2DHO7D-FXMGSSR-V4LBSZX-BNDONQ4
-	tunneld -httpAddr :8080 -httpsAddr ""
-	tunneld -httpsAddr "" -sniAddr ":443" -rootCA client_root.crt -tlsCrt server.crt -tlsKey server.key
+	tuneld
+	tuneld -clients YMBKT3V-ESUTZ2Z-7MRILIJ-T35FHGO-D2DHO7D-FXMGSSR-V4LBSZX-BNDONQ4
+	tuneld -httpAddr :8080 -httpsAddr ""
 
 Author:
 	Written by M. Matczuk (mmatczuk@gmail.com)
@@ -41,7 +40,6 @@ type options struct {
 	httpAddr   string
 	httpsAddr  string
 	tunnelAddr string
-	sniAddr    string
 	tlsCrt     string
 	tlsKey     string
 	rootCA     string
@@ -54,7 +52,6 @@ func parseArgs() *options {
 	httpAddr := flag.String("httpAddr", ":80", "Public address for HTTP connections, empty string to disable")
 	httpsAddr := flag.String("httpsAddr", ":443", "Public address listening for HTTPS connections, emptry string to disable")
 	tunnelAddr := flag.String("tunnelAddr", ":5223", "Public address listening for tunnel client")
-	sniAddr := flag.String("sniAddr", "", "Public address listening for TLS SNI connections, empty string to disable")
 	tlsCrt := flag.String("tlsCrt", "server.crt", "Path to a TLS certificate file")
 	tlsKey := flag.String("tlsKey", "server.key", "Path to a TLS key file")
 	rootCA := flag.String("rootCA", "", "Path to the trusted certificate chian used for client certificate authentication, if empty any client certificate is accepted")
@@ -67,7 +64,6 @@ func parseArgs() *options {
 		httpAddr:   *httpAddr,
 		httpsAddr:  *httpsAddr,
 		tunnelAddr: *tunnelAddr,
-		sniAddr:    *sniAddr,
 		tlsCrt:     *tlsCrt,
 		tlsKey:     *tlsKey,
 		rootCA:     *rootCA,

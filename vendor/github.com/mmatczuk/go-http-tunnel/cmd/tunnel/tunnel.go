@@ -182,8 +182,6 @@ func proxy(m map[string]*Tunnel, logger log.Logger) tunnel.ProxyFunc {
 			httpURL[t.Host] = u
 		case proto.TCP, proto.TCP4, proto.TCP6:
 			tcpAddr[t.RemoteAddr] = t.Addr
-		case proto.SNI:
-			tcpAddr[t.Host] = t.Addr
 		}
 	}
 

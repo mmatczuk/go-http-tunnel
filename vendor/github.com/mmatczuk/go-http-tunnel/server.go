@@ -18,7 +18,6 @@ import (
 
 	"golang.org/x/net/http2"
 
-	"github.com/inconshreveable/go-vhost"
 	"github.com/mmatczuk/go-http-tunnel/id"
 	"github.com/mmatczuk/go-http-tunnel/log"
 	"github.com/mmatczuk/go-http-tunnel/proto"
@@ -39,8 +38,6 @@ type ServerConfig struct {
 	Listener net.Listener
 	// Logger is optional logger. If nil logging is disabled.
 	Logger log.Logger
-	// Addr is TCP address to listen for TLS SNI connections
-	SNIAddr string
 }
 
 // Server is responsible for proxying public connections to the client over a
@@ -53,7 +50,6 @@ type Server struct {
 	connPool   *connPool
 	httpClient *http.Client
 	logger     log.Logger
-	vhostMuxer *vhost.TLSMuxer
 }
 
 // NewServer creates a new Server.
@@ -84,54 +80,6 @@ func NewServer(config *ServerConfig) (*Server, error) {
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
-	}
-
-	if config.SNIAddr != "" {
-		l, err := net.Listen("tcp", config.SNIAddr)
-		if err != nil {
-			return nil, err
-		}
-		mux, err := vhost.NewTLSMuxer(l, DefaultTimeout)
-		if err != nil {
-			return nil, fmt.Errorf("SNI Muxer creation failed: %s", err)
-		}
-		s.vhostMuxer = mux
-		go func() {
-			for {
-				conn, err := mux.NextError()
-				vhostName := ""
-				tlsConn, ok := conn.(*vhost.TLSConn)
-				if ok {
-					vhostName = tlsConn.Host()
-				}
-
-				switch err.(type) {
-				case vhost.BadRequest:
-					logger.Log(
-						"level", 0,
-						"action", "got a bad request!",
-						"addr", conn.RemoteAddr(),
-					)
-				case vhost.NotFound:
-
-					logger.Log(
-						"level", 0,
-						"action", "got a connection for an unknown vhost",
-						"addr", vhostName,
-					)
-				case vhost.Closed:
-					logger.Log(
-						"level", 0,
-						"action", "closed conn",
-						"addr", vhostName,
-					)
-				}
-
-				if conn != nil {
-					conn.Close()
-				}
-			}
-		}()
 	}
 
 	return s, nil
@@ -439,25 +387,6 @@ func (s *Server) addTunnels(tunnels map[string]*proto.Tunnel, identifier id.ID) 
 			)
 
 			i.Listeners = append(i.Listeners, l)
-		case proto.SNI:
-			if s.vhostMuxer == nil {
-				err = fmt.Errorf("unable to configure SNI for tunnel %s: %s", name, t.Protocol)
-				goto rollback
-			}
-			var l net.Listener
-			l, err = s.vhostMuxer.Listen(t.Host)
-			if err != nil {
-				goto rollback
-			}
-
-			s.logger.Log(
-				"level", 2,
-				"action", "add SNI vhost",
-				"identifier", identifier,
-				"host", t.Host,
-			)
-
-			i.Listeners = append(i.Listeners, l)
 		default:
 			err = fmt.Errorf("unsupported protocol for tunnel %s: %s", name, t.Protocol)
 			goto rollback
@@ -501,8 +430,7 @@ func (s *Server) listen(l net.Listener, identifier id.ID) {
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			if strings.Contains(err.Error(), "use of closed network connection") ||
-				strings.Contains(err.Error(), "Listener closed") {
+			if strings.Contains(err.Error(), "use of closed network connection") {
 				s.logger.Log(
 					"level", 2,
 					"action", "listener closed",
@@ -524,20 +452,11 @@ func (s *Server) listen(l net.Listener, identifier id.ID) {
 
 		msg := &proto.ControlMessage{
 			Action:         proto.ActionProxy,
+			ForwardedHost:  l.Addr().String(),
 			ForwardedProto: l.Addr().Network(),
 		}
 
-		tlsConn, ok := conn.(*vhost.TLSConn)
-		if ok {
-			msg.ForwardedHost = tlsConn.Host()
-			err = keepAlive(tlsConn.Conn)
-
-		} else {
-			msg.ForwardedHost = l.Addr().String()
-			err = keepAlive(conn)
-		}
-
-		if err != nil {
+		if err := keepAlive(conn); err != nil {
 			s.logger.Log(
 				"level", 1,
 				"msg", "TCP keepalive for tunneled connection failed",
@@ -684,10 +603,7 @@ func (s *Server) proxyConn(identifier id.ID, conn net.Conn, msg *proto.ControlMe
 		"src", identifier,
 	))
 
-	select {
-	case <-done:
-	case <-time.After(DefaultTimeout):
-	}
+	<-done
 
 	s.logger.Log(
 		"level", 2,

@@ -88,10 +88,6 @@ func loadClientConfigFromFile(file string) (*ClientConfig, error) {
 			if err := validateTCP(t); err != nil {
 				return nil, fmt.Errorf("%s %s", name, err)
 			}
-		case proto.SNI:
-			if err := validateSNI(t); err != nil {
-				return nil, fmt.Errorf("%s %s", name, err)
-			}
 		default:
 			return nil, fmt.Errorf("%s invalid protocol %q", name, t.Protocol)
 		}
@@ -137,30 +133,6 @@ func validateTCP(t *Tunnel) error {
 
 	if t.Host != "" {
 		return fmt.Errorf("host: unexpected")
-	}
-	if t.Auth != "" {
-		return fmt.Errorf("auth: unexpected")
-	}
-
-	return nil
-}
-
-func validateSNI(t *Tunnel) error {
-	var err error
-	if t.Host == "" {
-		return fmt.Errorf("host: missing")
-	}
-	if t.Addr == "" {
-		return fmt.Errorf("addr: missing")
-	}
-	if t.Addr, err = normalizeAddress(t.Addr); err != nil {
-		return fmt.Errorf("addr: %s", err)
-	}
-
-	// unexpected
-
-	if t.RemoteAddr != "" {
-		return fmt.Errorf("remote_addr: unexpected")
 	}
 	if t.Auth != "" {
 		return fmt.Errorf("auth: unexpected")

@@ -27,24 +27,24 @@
 
 [[constraint]]
   name = "github.com/cenkalti/backoff"
-  version = "2.1.0"
+  version = "1.1.0"
 
 [[constraint]]
   name = "github.com/golang/mock"
-  version = "1.2.0"
+  version = "1.0.0"
+
+[[constraint]]
+  name = "github.com/google/gops"
+  version = "0.3.2"
 
 [[constraint]]
   branch = "master"
   name = "golang.org/x/net"
 
 [[constraint]]
+  branch = "v2"
   name = "gopkg.in/yaml.v2"
-  version = "2.2.2"
 
 [[constraint]]
   branch = "master"
   name = "github.com/felixge/tcpkeepalive"
-
-[[constraint]]
-  branch = "master"
-  name = "github.com/inconshreveable/go-vhost"

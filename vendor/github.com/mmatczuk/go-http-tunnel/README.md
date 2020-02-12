@@ -6,7 +6,6 @@ Features:
 
 * HTTP proxy with [basic authentication](https://en.wikipedia.org/wiki/Basic_access_authentication)
 * TCP proxy
-* [SNI](https://en.wikipedia.org/wiki/Server_Name_Indication) vhost proxy
 * Client auto reconnect
 * Client management and eviction
 * Easy to use CLI
@@ -68,65 +67,6 @@ $ tunneld -tlsCrt .tunneld/server.crt -tlsKey .tunneld/server.key
 
 This will run HTTP server on port `80` and HTTPS (HTTP/2) server on port `443`. If you want to use HTTPS it's recommended to get a properly signed certificate to avoid security warnings.
 
-### Run Server as a Service on Ubuntu using Systemd:
-
-* After completing the steps above successfully, create a new file for your service (you can name it whatever you want, just replace the name below with your chosen name).
-
-``` bash
-$ vim tunneld.service
-```
-
-* Add the following configuration to the file
-
-```
-[Unit]
-Description=Go-Http-Tunnel Service
-After=network.target
-After=network-online.target
-
-[Service]
-ExecStart=/path/to/your/tunneld -tlsCrt /path/to/your/folder/.tunneld/server.crt -tlsKey /path/to/your/folder/.tunneld/server.key
-TimeoutSec=30
-Restart=on-failure
-RestartSec=30
-
-[Install]
-WantedBy=multi-user.target
-```
-
-* Save and exit this file.
-* Move this new file to /etc/systemd/system/
-
-```bash
-$ sudo mv tunneld.service /etc/systemd/system/
-```
-
-* Change the file permission to allow it to run.
-
-```bash
-$ sudo chmod u+x /etc/systemd/system/tunneld.service
-```
-
-* Start the new service and make sure you don't get any errors, and that your client is able to connect.
-
-```bash
-$ sudo systemctl start tunneld.service
-```
-
-* You can stop the service with:
-
-```bash
-$ sudo systemctl stop tunneld.service
-```
-
-* Finally, if you want the service to start automatically when the server is rebooted, you need to enable it.
-
-```bash
-$ sudo systemctl enable tunneld.service
-```
-
-There are many more options for systemd services, and this is by not means an exhaustive configuration file.
-
 ## Configuration
 
 The tunnel client `tunnel` requires configuration file, by default it will try reading `tunnel.yml` in your current working directory. If you want to specify other file use `-config` flag.
@@ -150,10 +90,6 @@ looks like this
         proto: tcp
         addr: 192.168.0.5:22
         remote_addr: 0.0.0.0:22
-      tls:
-  	    proto: sni
-  	    addr: localhost:443
-  	    host: tls.my-tunnel-host.com
 ```
 
 Configuration options:
@@ -163,10 +99,10 @@ Configuration options:
 * `tls_key`: path to client TLS certificate key, *default:* `client.key` *in the config file directory*
 * `root_ca`: path to trusted root certificate authority pool file, if empty any server certificate is accepted
 *  `tunnels / [name]`
-    * `proto`: tunnel protocol, `http`, `tcp` or `sni`
+    * `proto`: tunnel protocol, `http` or `tcp`
     * `addr`: forward traffic to this local port number or network address, for `proto=http` this can be full URL i.e. `https://machine/sub/path/?plus=params`, supports URL schemes `http` and `https`
     * `auth`: (`proto=http`) (optional) basic authentication credentials to enforce on tunneled requests, format `user:password`
-    * `host`: (`proto=http`, `proto=sni`) hostname to request (requires reserved name and DNS CNAME)
+    * `host`: (`proto=http`) hostname to request (requires reserved name and DNS CNAME)
     * `remote_addr`: (`proto=tcp`) bind the remote TCP address
 * `backoff`
     * `interval`: how long client would wait before redialing the server if connection was lost, exponential backoff initial interval, *default:* `500ms`
@@ -175,10 +111,9 @@ Configuration options:
     * `max_time`: maximal time client would try to reconnect to the server if connection was lost, set `0` to never stop trying, *default:* `15m`
 
 ## How it works
+Client opens a TLS connection to a server. Server accepts connections from known clients only, client is recognised by it's TLS certificate ID. The server is publicly available and proxies incoming connections to the client. Then the connection is further proxied in the client's network. 
 
-A client opens TLS connection to a server. The server accepts connections from known clients only. The client is recognized by its TLS certificate ID. The server is publicly available and proxies incoming connections to the client. Then the connection is further proxied in the client's network.
-
-The tunnel is based HTTP/2 for speed and security. There is a single TCP connection between client and server and all the proxied connections are multiplexed using HTTP/2.
+Tunnel is based HTTP/2 for speed and security. There is a single TCP connection between client and server and all the proxied connections are multiplexed using HTTP/2.
 
 ## Donation
 

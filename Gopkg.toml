@@ -34,11 +34,6 @@
   version = "1.2.0"
 
 [[constraint]]
-  name = "github.com/mmatczuk/go-http-tunnel"
-  branch = "master"
-  source = "github.com/mmatczuk/go-http-tunnel"
-
-[[constraint]]
   branch = "master"
   name = "golang.org/x/net"
 
