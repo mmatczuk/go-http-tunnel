@@ -4,6 +4,13 @@
 
 package log
 
+const (
+	LevelError = iota
+	LevelInfo
+	LevelDebug
+	LevelTrace
+)
+
 type filterLogger struct {
 	level  int
 	logger Logger
