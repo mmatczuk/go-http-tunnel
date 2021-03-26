@@ -44,10 +44,10 @@ config.yaml:
 	    host: tls.my-tunnel-host.com
 
 Author:
-	Written by M. Matczuk (mmatczuk@gmail.com)
+	Written by M. Matczuk (hons82@gmail.com)
 
 Bugs:
-	Submit bugs to https://github.com/mmatczuk/go-http-tunnel/issues
+	Submit bugs to https://github.com/hons82/go-http-tunnel/issues
 `
 
 func init() {

@@ -1,6 +1,6 @@
 # Benchmark report
 
-The benchmark compares [tunnel](https://github.com/mmatczuk/go-http-tunnel) to [koding tunnel](https://github.com/koding/tunnel) on serving 184 midsized files that were gathered by saving `amazon.com` for offline view. The data set consists of images and text data (js, css, html). On start client loads the files into memory and act as a file server.
+The benchmark compares [tunnel](https://github.com/hons82/go-http-tunnel) to [koding tunnel](https://github.com/koding/tunnel) on serving 184 midsized files that were gathered by saving `amazon.com` for offline view. The data set consists of images and text data (js, css, html). On start client loads the files into memory and act as a file server.
 
 The diagrams were rendered using [hdrhistogram](http://hdrhistogram.github.io/HdrHistogram/plotFiles.html) and the input files were generated with help of [github.com/codahale/hdrhistogram](https://github.com/codahale/hdrhistogram) library. The vegeta raw results were corrected for stalls using [hdr correction method](https://godoc.org/github.com/codahale/hdrhistogram#Histogram.RecordCorrectedValue).
 
@@ -31,7 +31,7 @@ Detailed results of load spike test.
 
 This test compares performance on twenty minutes constant pressure runs. tunnel shows ability to trade latency for throughput. It runs fine at 300 req/sec but at higher request rates we observe poor latency and some message drops. Koding tunnel has acceptable performance at 300 req/sec, however, with increased load it just breaks.
 
-Both implementations have a connection (or memory) leak when dealing with too high loads. This results in process (or machine) crash as machine runs out of memory. It's 100% reproducible, when process crashes it has few hundred thousands go routines waiting on select in a connection and memory full of connection buffers. 
+Both implementations have a connection (or memory) leak when dealing with too high loads. This results in process (or machine) crash as machine runs out of memory. It's 100% reproducible, when process crashes it has few hundred thousands go routines waiting on select in a connection and memory full of connection buffers.
 
 ![](constload.png)
 
