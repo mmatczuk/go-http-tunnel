@@ -204,13 +204,12 @@ func (c *Client) dial() (net.Conn, error) {
 	if b == nil {
 		return doDial()
 	}
-
+	b.Reset()
 	for {
 		conn, err := doDial()
 
 		// success
 		if err == nil {
-			b.Reset()
 			return conn, err
 		}
 
