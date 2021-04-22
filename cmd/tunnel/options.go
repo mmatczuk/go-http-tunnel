@@ -44,7 +44,9 @@ config.yaml:
 	    host: tls.my-tunnel-host.com
 
 Author:
-	Written by M. Matczuk (hons82@gmail.com)
+	Written by M. Matczuk (mmatczuk@gmail.com)
+	Forked  by H. Tribus  (hons82@gmail.com)
+
 
 Bugs:
 	Submit bugs to https://github.com/hons82/go-http-tunnel/issues

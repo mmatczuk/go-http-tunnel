@@ -22,7 +22,8 @@ Example:
 	tunneld -httpsAddr "" -sniAddr ":443" -rootCA client_root.crt -tlsCrt server.crt -tlsKey server.key
 
 Author:
-	Written by M. Matczuk (hons82@gmail.com)
+	Written by M. Matczuk (mmatczuk@gmail.com)
+	Forked  by H. Tribus  (hons82@gmail.com)
 
 Bugs:
 	Submit bugs to https://github.com/hons82/go-http-tunnel/issues
