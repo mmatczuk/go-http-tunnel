@@ -82,22 +82,25 @@ ARCH = "386 amd64 arm"
 OSARCH = "!darwin/386 !darwin/arm !windows/arm"
 GIT_COMMIT = $(shell git describe --always)
 
+.PHONY: release_fast
+release_fast: check clean build package
+
 .PHONY: release
 release: check test clean build package
 
 .PHONY: build
 build:
-	mkdir ${OUTPUT_DIR}
+	mkdir -p ${OUTPUT_DIR}
 	CGO_ENABLED=0 GOARM=5 gox -ldflags "-w -X main.version=$(GIT_COMMIT)" \
 	-os=${OS} -arch=${ARCH} -osarch=${OSARCH} -output "${OUTPUT_DIR}/pkg/{{.OS}}_{{.Arch}}/{{.Dir}}" \
 	./cmd/tunnel ./cmd/tunneld
 
 .PHONY: package
 package:
-	mkdir ${OUTPUT_DIR}/dist
+	mkdir -p ${OUTPUT_DIR}/dist
 	cd ${OUTPUT_DIR}/pkg/; for osarch in *; do (cd $$osarch; tar zcvf ../../dist/tunnel_$$osarch.tar.gz ./*); done;
 	cd ${OUTPUT_DIR}/dist; sha256sum * > ./SHA256SUMS
 
 .PHONY: publish
 publish:
-	ghr -recreate -u mmatczuk -t ${GITHUB_TOKEN} -r go-http-tunnel pre-release ${OUTPUT_DIR}/dist
+	ghr -recreate -u hons82 -t ${GITHUB_TOKEN} -r go-http-tunnel pre-release ${OUTPUT_DIR}/dist

@@ -45,9 +45,11 @@ config.yaml:
 
 Author:
 	Written by M. Matczuk (mmatczuk@gmail.com)
+	Forked  by H. Tribus  (hons82@gmail.com)
+
 
 Bugs:
-	Submit bugs to https://github.com/mmatczuk/go-http-tunnel/issues
+	Submit bugs to https://github.com/hons82/go-http-tunnel/issues
 `
 
 func init() {

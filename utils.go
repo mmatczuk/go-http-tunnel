@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/mmatczuk/go-http-tunnel/log"
+	"github.com/hons82/go-http-tunnel/log"
 )
 
 func transfer(dst io.Writer, src io.Reader, logger log.Logger) {

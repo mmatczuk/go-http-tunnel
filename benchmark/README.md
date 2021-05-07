@@ -1,6 +1,6 @@
 # Benchmark report
 
-The benchmark compares [tunnel](https://github.com/mmatczuk/go-http-tunnel) to [koding tunnel](https://github.com/koding/tunnel) on serving 184 midsized files that were gathered by saving `amazon.com` for offline view. The data set consists of images and text data (js, css, html). On start client loads the files into memory and act as a file server.
+The benchmark compares [tunnel](https://github.com/hons82/go-http-tunnel) to [koding tunnel](https://github.com/koding/tunnel) on serving 184 midsized files that were gathered by saving `amazon.com` for offline view. The data set consists of images and text data (js, css, html). On start client loads the files into memory and act as a file server.
 
 The diagrams were rendered using [hdrhistogram](http://hdrhistogram.github.io/HdrHistogram/plotFiles.html) and the input files were generated with help of [github.com/codahale/hdrhistogram](https://github.com/codahale/hdrhistogram) library. The vegeta raw results were corrected for stalls using [hdr correction method](https://godoc.org/github.com/codahale/hdrhistogram#Histogram.RecordCorrectedValue).
 

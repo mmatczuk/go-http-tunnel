@@ -1,4 +1,4 @@
-# Go HTTP tunnel [![GoDoc](http://img.shields.io/badge/go-documentation-blue.svg)](http://godoc.org/github.com/mmatczuk/go-http-tunnel) [![Go Report Card](https://goreportcard.com/badge/github.com/mmatczuk/go-http-tunnel)](https://goreportcard.com/report/github.com/mmatczuk/go-http-tunnel) [![Build Status](http://img.shields.io/travis/mmatczuk/go-http-tunnel.svg?branch=master)](https://travis-ci.org/mmatczuk/go-http-tunnel) [![Github All Releases](https://img.shields.io/github/downloads/mmatczuk/go-http-tunnel/total.svg)](https://github.com/mmatczuk/go-http-tunnel/releases)
+# Go HTTP tunnel [![GoDoc](http://img.shields.io/badge/go-documentation-blue.svg)](http://godoc.org/github.com/hons82/go-http-tunnel) [![Go Report Card](https://goreportcard.com/badge/github.com/hons82/go-http-tunnel)](https://goreportcard.com/report/github.com/hons82/go-http-tunnel) [![Build Status](http://img.shields.io/travis/hons82/go-http-tunnel.svg?branch=master)](https://travis-ci.org/hons82/go-http-tunnel) [![Github All Releases](https://img.shields.io/github/downloads/hons82/go-http-tunnel/total.svg)](https://github.com/hons82/go-http-tunnel/releases)
 
 Go HTTP tunnel is a reverse tunnel based on HTTP/2. It enables you to share your localhost when you don't have a public IP.
 
@@ -22,10 +22,10 @@ Common use cases:
 Build the latest version.
 
 ```bash
-$ go get -u github.com/mmatczuk/go-http-tunnel/cmd/...
+$ go get -u github.com/hons82/go-http-tunnel/cmd/...
 ```
 
-Alternatively [download the latest release](https://github.com/mmatczuk/go-http-tunnel/releases/latest).
+Alternatively [download the latest release](https://github.com/hons82/go-http-tunnel/releases/latest).
 
 ## Running
 
@@ -67,6 +67,8 @@ $ tunneld -tlsCrt .tunneld/server.crt -tlsKey .tunneld/server.key
 ```
 
 This will run HTTP server on port `80` and HTTPS (HTTP/2) server on port `443`. If you want to use HTTPS it's recommended to get a properly signed certificate to avoid security warnings.
+
+If both http and https are configured, an automatic redirect to the secure channel will be established using an `http.StatusMovedPermanently` (301)
 
 ### Run Server as a Service on Ubuntu using Systemd:
 
@@ -192,4 +194,4 @@ A GitHub star is always appreciated!
 
 Copyright (C) 2017 Michał Matczuk
 
-This project is distributed under the AGPL-3 license. See the [LICENSE](https://github.com/mmatczuk/go-http-tunnel/blob/master/LICENSE) file for details. If you need an enterprice license contact me directly.
+This project is distributed under the AGPL-3 license. See the [LICENSE](https://github.com/hons82/go-http-tunnel/blob/master/LICENSE) file for details. If you need an enterprice license contact me directly.
