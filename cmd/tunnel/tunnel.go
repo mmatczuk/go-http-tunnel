@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v2"
 
@@ -93,7 +94,12 @@ func main() {
 	if err != nil {
 		fatal("failed to dump config: %s", err)
 	}
-	logger.Log("config", string(b))
+	for _, value := range strings.Split(string(b), "\n") {
+		logger.Log(
+			"level", 1,
+			"config", value,
+		)
+	}
 
 	client, err := tunnel.NewClient(&tunnel.ClientConfig{
 		ServerAddr:      config.ServerAddr,
