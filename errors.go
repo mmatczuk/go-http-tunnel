@@ -4,12 +4,24 @@
 
 package tunnel
 
-import "errors"
+import (
+	"errors"
+	"io/ioutil"
+)
 
 var (
-	errClientNotSubscribed    = errors.New("client not subscribed")
-	errClientNotConnected     = errors.New("client not connected")
-	errClientAlreadyConnected = errors.New("client already connected")
+	errClientNotSubscribed    = newError("clientNotSubscribed.html", "client not subscribed")
+	errClientNotConnected     = newError("clientNotConnected.html", "client not connected")
+	errClientAlreadyConnected = newError("clientAlreadyConnected.html", "client already connected")
 
-	errUnauthorised = errors.New("unauthorised")
+	errUnauthorised = newError("unauthorised.html", "unauthorised")
 )
+
+func newError(fileName string, defaultMsg string) error {
+	content, err := ioutil.ReadFile("html/errors/" + fileName)
+	if err != nil {
+		// handle the case where the file doesn't exist
+		return errors.New(defaultMsg)
+	}
+	return errors.New(string(content))
+}

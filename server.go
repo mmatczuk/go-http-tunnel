@@ -564,22 +564,26 @@ func (s *Server) listen(l net.Listener, identifier id.ID) {
 // ServeHTTP proxies http connection to the client.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resp, err := s.RoundTrip(r)
-	if err == errUnauthorised {
-		w.Header().Set("WWW-Authenticate", "Basic realm=\"User Visible Realm\"")
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return
-	}
 	if err != nil {
+		code := http.StatusBadGateway
+		if err == errUnauthorised {
+			w.Header().Set("WWW-Authenticate", "Basic realm=\"User Visible Realm\"")
+			code = http.StatusUnauthorized
+		} else if err == errClientNotSubscribed {
+			code = http.StatusNotFound
+		}
 		s.logger.Log(
 			"level", 0,
 			"action", "round trip failed",
 			"addr", r.RemoteAddr,
 			"host", r.Host,
 			"url", r.URL,
-			"err", err,
+			"code", code,
 		)
-
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.WriteHeader(code)
+		fmt.Fprintln(w, err.Error())
 		return
 	}
 	defer resp.Body.Close()
