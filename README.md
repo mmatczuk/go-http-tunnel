@@ -176,6 +176,10 @@ Configuration options:
     * `max_interval`: maximal time client would wait before redialing the server, *default:* `1m`
     * `max_time`: maximal time client would try to reconnect to the server if connection was lost, set `0` to never stop trying, *default:* `15m`
 
+### Custom error pages
+
+Just copy the `html` folder from this repository into the folder of the tunnel-server to have a starting point. In the `html/errors` folder you'll find a sample page for each error that is currently customisable which you'll be able to change according to your needs.
+
 ## How it works
 
 A client opens TLS connection to a server. The server accepts connections from known clients only. The client is recognized by its TLS certificate ID. The server is publicly available and proxies incoming connections to the client. Then the connection is further proxied in the client's network.
@@ -186,7 +190,7 @@ The tunnel is based HTTP/2 for speed and security. There is a single TCP connect
 
 If this project help you reduce time to develop, you can give me a cup of coffee.
 
-[![paypal](https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=RMM46NAEY7YZ6&lc=US&item_name=go%2dhttp%2dtunnel&currency_code=USD&bn=PP%2dDonationsBF%3abtn_donateCC_LG%2egif%3aNonHosted)
+[![paypal](https://www.paypalobjects.com/en_US/IT/i/btn/btn_donateCC_LG.gif)](https://www.paypal.com/donate?hosted_button_id=E74HP49TAAUQ2)
 
 A GitHub star is always appreciated!
 
