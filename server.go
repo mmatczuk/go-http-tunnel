@@ -222,7 +222,7 @@ func (s *Server) Start() {
 }
 
 func (s *Server) handleClient(conn net.Conn) {
-	logger := log.NewContext(s.logger).With("addr", conn.RemoteAddr())
+	logger := log.NewContext(s.logger).With("remote addr", conn.RemoteAddr())
 
 	logger.Log(
 		"level", 1,
@@ -795,4 +795,41 @@ func (s *Server) Stop() {
 	if s.listener != nil {
 		s.listener.Close()
 	}
+}
+
+type ListenerInfo struct {
+	Network string
+	Addr    string
+}
+
+type ClientInfo struct {
+	Id        string
+	Listeners []*ListenerInfo
+	Hosts     []string
+}
+
+func (s *Server) GetClientInfo() []*ClientInfo {
+	s.registry.mu.Lock()
+	defer s.registry.mu.Unlock()
+	ret := []*ClientInfo{}
+	for k, v := range s.registry.items {
+		c := &ClientInfo{Id: k.String()}
+		ret = append(ret, c)
+		if v == voidRegistryItem {
+			s.logger.Log(
+				"level", 3,
+				"identifier", k.String(),
+				"msg", "void registry item",
+			)
+		} else {
+			for _, l := range v.Hosts {
+				c.Hosts = append(c.Hosts, l.Host)
+			}
+			for _, l := range v.Listeners {
+				p := &ListenerInfo{Network: l.Addr().Network(), Addr: l.Addr().String()}
+				c.Listeners = append(c.Listeners, p)
+			}
+		}
+	}
+	return ret
 }

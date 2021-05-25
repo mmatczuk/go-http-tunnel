@@ -66,6 +66,22 @@ func main() {
 		}
 	}
 
+	// start API
+	if opts.apiAddr != "" {
+		go func() {
+			logger.Log(
+				"level", 1,
+				"action", "start api",
+				"addr", opts.apiAddr,
+			)
+			go initAPIServer(&ApiConfig{
+				Addr:   opts.apiAddr,
+				Server: server,
+				Logger: logger,
+			})
+		}()
+	}
+
 	// start HTTP
 	if opts.httpAddr != "" {
 		go func() {

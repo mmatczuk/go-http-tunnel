@@ -43,7 +43,7 @@ $ openssl req -x509 -nodes -newkey rsa:2048 -sha256 -keyout client.key -out clie
 $ openssl req -x509 -nodes -newkey rsa:2048 -sha256 -keyout server.key -out server.crt
 ```
 
-Run client:
+### Run client:
 
 * Install `tunnel` binary
 * Make `.tunnel` directory in your project directory
@@ -55,7 +55,7 @@ Run client:
 $ tunnel -config ./tunnel/tunnel.yml start-all
 ```
 
-Run server:
+### Run server:
 
 * Install `tunneld` binary
 * Make `.tunneld` directory
@@ -67,8 +67,6 @@ $ tunneld -tlsCrt .tunneld/server.crt -tlsKey .tunneld/server.key
 ```
 
 This will run HTTP server on port `80` and HTTPS (HTTP/2) server on port `443`. If you want to use HTTPS it's recommended to get a properly signed certificate to avoid security warnings.
-
-If both http and https are configured, an automatic redirect to the secure channel will be established using an `http.StatusMovedPermanently` (301)
 
 ### Run Server as a Service on Ubuntu using Systemd:
 
@@ -129,7 +127,7 @@ $ sudo systemctl enable tunneld.service
 
 There are many more options for systemd services, and this is by not means an exhaustive configuration file.
 
-## Configuration
+## Configuration - Client
 
 The tunnel client `tunnel` requires configuration file, by default it will try reading `tunnel.yml` in your current working directory. If you want to specify other file use `-config` flag.
 
@@ -176,9 +174,49 @@ Configuration options:
     * `max_interval`: maximal time client would wait before redialing the server, *default:* `1m`
     * `max_time`: maximal time client would try to reconnect to the server if connection was lost, set `0` to never stop trying, *default:* `15m`
 
+## Configuration - Server
+
+* `httpAddr`: Public address for HTTP connections, empty string to disable,  *default:* `:80`
+* `httpsAddr`: Public address listening for HTTPS connections, emptry string to disable, *default:* `:443`
+* `tunnelAddr`: Public address listening for tunnel client, *default:* `:5223`
+* `apiAddr`: Public address for HTTP API to get info about the tunnels, *default:* `:5091`
+* `sniAddr`: Public address listening for TLS SNI connections, empty string to disable
+* `tlsCrt`: Path to a TLS certificate file, *default:* `server.crt`
+* `tlsKey`: Path to a TLS key file, *default:* `server.key`
+* `rootCA`: Path to the trusted certificate chian used for client certificate authentication, if empty any client certificate is accepted
+* `clients`: Comma-separated list of tunnel client ids, if empty accept all clients
+* `logLevel`: Level of messages to log, 0-3, *default:* 1
+
+If both `httpAddr` and `httpsAddr` are configured, an automatic redirect to the secure channel will be established using an `http.StatusMovedPermanently` (301)
+
 ### Custom error pages
 
 Just copy the `html` folder from this repository into the folder of the tunnel-server to have a starting point. In the `html/errors` folder you'll find a sample page for each error that is currently customisable which you'll be able to change according to your needs.
+
+## Server API
+
+If the `apiAddr` is properly set, the tunnel server offers a simple API to query its state.
+
+### /api/clients/list
+
+Returns a list of `clients` together with a list of open tunnels in JSON format.
+
+```json
+[
+    {
+        "Id": "BHXWUUT-A6IYDWI-2BSIC5A-...",
+        "Listeners": [
+            {
+                "Network": "tcp",
+                "Addr": "192.0.2.1:25"
+            }
+        ],
+        "Hosts": [
+            "tunnel1.my-tunnel-host.com"
+        ]
+    }
+]
+```
 
 ## How it works
 
