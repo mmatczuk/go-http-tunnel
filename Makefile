@@ -1,6 +1,6 @@
 
 GO_FILES := $(shell \
-	find . '(' -path '*/.*' -o -path './vendor' ')' -prune \
+	find . '(' -path '*/.*' -o -path './vendor' -o -path './src' ')' -prune \
 	-o -name '*.go' -print | cut -b3-)
 
 LINT_IGNORE := "/id/\|/tunnelmock/\|/vendor/"
@@ -92,7 +92,7 @@ release: check test clean build package
 build:
 	mkdir -p ${OUTPUT_DIR}
 	CGO_ENABLED=0 GOARM=5 gox -ldflags "-w -X main.version=$(GIT_COMMIT)" \
-	-os=${OS} -arch=${ARCH} -osarch=${OSARCH} -output "${OUTPUT_DIR}/pkg/{{.OS}}_{{.Arch}}/{{.Dir}}" \
+	-mod=vendor -os=${OS} -arch=${ARCH} -osarch=${OSARCH} -output "${OUTPUT_DIR}/pkg/{{.OS}}_{{.Arch}}/{{.Dir}}" \
 	./cmd/tunnel ./cmd/tunneld
 
 .PHONY: package

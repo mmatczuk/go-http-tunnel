@@ -47,7 +47,7 @@ func initAPIServer(config *ApiConfig) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			w.Write(data)
-			
+
 			logger.Log(
 				"level", 3,
 				"action", "transferred",

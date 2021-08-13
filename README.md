@@ -173,6 +173,8 @@ Configuration options:
     * `multiplier`: interval multiplier if reconnect failed, *default:* `1.5`
     * `max_interval`: maximal time client would wait before redialing the server, *default:* `1m`
     * `max_time`: maximal time client would try to reconnect to the server if connection was lost, set `0` to never stop trying, *default:* `15m`
+* `keep_alive`**
+     * `interval`: the amount of time to wait between sending keepalive packets, *default:* `25s`
 
 ## Configuration - Server
 
@@ -185,6 +187,7 @@ Configuration options:
 * `tlsKey`: Path to a TLS key file, *default:* `server.key`
 * `rootCA`: Path to the trusted certificate chian used for client certificate authentication, if empty any client certificate is accepted
 * `clients`: Comma-separated list of tunnel client ids, if empty accept all clients
+* `keepAlive`: the amount of time to wait between sending keepalive packets *default:* `45s`
 * `logLevel`: Level of messages to log, 0-3, *default:* 1
 
 If both `httpAddr` and `httpsAddr` are configured, an automatic redirect to the secure channel will be established using an `http.StatusMovedPermanently` (301)

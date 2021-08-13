@@ -18,7 +18,8 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/cenkalti/backoff"
-	"github.com/hons82/go-http-tunnel"
+	tunnel "github.com/hons82/go-http-tunnel"
+	"github.com/hons82/go-http-tunnel/connection"
 	"github.com/hons82/go-http-tunnel/id"
 	"github.com/hons82/go-http-tunnel/log"
 	"github.com/hons82/go-http-tunnel/proto"
@@ -108,6 +109,7 @@ func main() {
 		Tunnels:         tunnels(config.Tunnels),
 		Proxy:           proxy(config.Tunnels, logger),
 		Logger:          logger,
+		KeepAlive:       config.KeepAlive,
 	})
 	if err != nil {
 		fatal("failed to create client: %s", err)
@@ -149,7 +151,7 @@ func tlsConfig(config *ClientConfig) (*tls.Config, error) {
 	}, nil
 }
 
-func expBackoff(c BackoffConfig) *backoff.ExponentialBackOff {
+func expBackoff(c connection.BackoffConfig) *backoff.ExponentialBackOff {
 	b := backoff.NewExponentialBackOff()
 	b.InitialInterval = c.Interval
 	b.Multiplier = c.Multiplier

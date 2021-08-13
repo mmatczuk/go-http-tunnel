@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 
+	"github.com/hons82/go-http-tunnel/connection"
 	"github.com/hons82/go-http-tunnel/log"
 	"github.com/hons82/go-http-tunnel/proto"
 )
@@ -91,7 +92,7 @@ func (p *TCPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage
 	}
 	defer local.Close()
 
-	if err := keepAlive(local); err != nil {
+	if err := connection.SetDefaultKeepAlive(local); err != nil {
 		p.logger.Log(
 			"level", 1,
 			"msg", "TCP keepalive for tunneled connection failed",

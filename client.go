@@ -16,6 +16,7 @@ import (
 
 	"golang.org/x/net/http2"
 
+	"github.com/hons82/go-http-tunnel/connection"
 	"github.com/hons82/go-http-tunnel/log"
 	"github.com/hons82/go-http-tunnel/proto"
 )
@@ -32,7 +33,7 @@ type ClientConfig struct {
 	DialTLS func(network, addr string, config *tls.Config) (net.Conn, error)
 	// Backoff specifies backoff policy on server connection retry. If nil
 	// when dial fails it will not be retried.
-	Backoff Backoff
+	Backoff connection.Backoff
 	// Tunnels specifies the tunnels client requests to be opened on server.
 	Tunnels map[string]*proto.Tunnel
 	// Proxy is ProxyFunc responsible for transferring data between server
@@ -40,6 +41,8 @@ type ClientConfig struct {
 	Proxy ProxyFunc
 	// Logger is optional logger. If nil logging is disabled.
 	Logger log.Logger
+	// Used to configure the tcp keepalive for the client -> server tcp connection
+	KeepAlive connection.KeepAliveConfig
 }
 
 // Client is responsible for creating connection to the server, handling control
@@ -172,7 +175,11 @@ func (c *Client) dial() (net.Conn, error) {
 			conn, err = d.Dial(network, addr)
 
 			if err == nil {
-				err = keepAlive(conn)
+				c.logger.Log(
+					"level", 1,
+					"msg", fmt.Sprintf("Setting up keep alive using config: %v", c.config.KeepAlive.String()),
+				)
+				err = c.config.KeepAlive.Set(conn)
 			}
 			if err == nil {
 				conn = tls.Client(conn, tlsConfig)

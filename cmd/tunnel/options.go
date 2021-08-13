@@ -23,7 +23,7 @@ Commands:
 
 Examples:
 	tunnel start www ssh
-	tunnel -config config.yaml -log-level 2 start ssh
+	tunnel -config config.yaml -logLevel 2 start ssh
 	tunnel start-all
 
 config.yaml:
@@ -70,7 +70,7 @@ type options struct {
 
 func parseArgs() (*options, error) {
 	config := flag.String("config", "tunnel.yml", "Path to tunnel configuration file")
-	logLevel := flag.Int("log-level", 1, "Level of messages to log, 0-3")
+	logLevel := flag.Int("logLevel", 1, "Level of messages to log, 0-3")
 	version := flag.Bool("version", false, "Prints tunnel version")
 	flag.Parse()
 

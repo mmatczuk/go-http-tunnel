@@ -18,6 +18,7 @@ import (
 
 	"golang.org/x/net/http2"
 
+	"github.com/hons82/go-http-tunnel/connection"
 	"github.com/hons82/go-http-tunnel/id"
 	"github.com/hons82/go-http-tunnel/log"
 	"github.com/hons82/go-http-tunnel/proto"
@@ -41,6 +42,8 @@ type ServerConfig struct {
 	Logger log.Logger
 	// Addr is TCP address to listen for TLS SNI connections
 	SNIAddr string
+	// Used to configure the keepalive for the server -> client tcp connection
+	KeepAlive connection.KeepAliveConfig
 }
 
 // Server is responsible for proxying public connections to the client over a
@@ -208,7 +211,12 @@ func (s *Server) Start() {
 			continue
 		}
 
-		if err := keepAlive(conn); err != nil {
+		s.logger.Log(
+			"level", 2,
+			"msg", fmt.Sprintf("Setting up keep alive using config: %v", s.config.KeepAlive.String()),
+		)
+
+		if err := s.config.KeepAlive.Set(conn); err != nil {
 			s.logger.Log(
 				"level", 0,
 				"msg", "TCP keepalive for control connection failed",
@@ -318,7 +326,7 @@ func (s *Server) handleClient(conn net.Conn) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		err = fmt.Errorf("Status %s", resp.Status)
+		err = fmt.Errorf("status %s", resp.Status)
 		logger.Log(
 			"level", 2,
 			"msg", "handshake failed",
@@ -328,7 +336,7 @@ func (s *Server) handleClient(conn net.Conn) {
 	}
 
 	if resp.ContentLength == 0 {
-		err = fmt.Errorf("Tunnels Content-Legth: 0")
+		err = fmt.Errorf("tunnels content-length: 0")
 		logger.Log(
 			"level", 2,
 			"msg", "handshake failed",
@@ -347,7 +355,7 @@ func (s *Server) handleClient(conn net.Conn) {
 	}
 
 	if len(tunnels) == 0 {
-		err = fmt.Errorf("No tunnels")
+		err = fmt.Errorf("no tunnels")
 		logger.Log(
 			"level", 2,
 			"msg", "handshake failed",
@@ -528,13 +536,19 @@ func (s *Server) listen(l net.Listener, identifier id.ID) {
 		}
 
 		tlsConn, ok := conn.(*vhost.TLSConn)
+
+		s.logger.Log(
+			"level", 1,
+			"msg", fmt.Sprintf("Setting up keep alive using config: %v", s.config.KeepAlive.String()),
+		)
+
 		if ok {
 			msg.ForwardedHost = tlsConn.Host()
-			err = keepAlive(tlsConn.Conn)
+			err = s.config.KeepAlive.Set(tlsConn.Conn)
 
 		} else {
 			msg.ForwardedHost = l.Addr().String()
-			err = keepAlive(conn)
+			err = s.config.KeepAlive.Set(conn)
 		}
 
 		if err != nil {
@@ -797,23 +811,26 @@ func (s *Server) Stop() {
 	}
 }
 
+// ListenerInfo info about the listener
 type ListenerInfo struct {
 	Network string
 	Addr    string
 }
 
+// ClientInfo info about the client
 type ClientInfo struct {
-	Id        string
+	ID        string
 	Listeners []*ListenerInfo
 	Hosts     []string
 }
 
+// GetClientInfo prepare and get client info
 func (s *Server) GetClientInfo() []*ClientInfo {
 	s.registry.mu.Lock()
 	defer s.registry.mu.Unlock()
 	ret := []*ClientInfo{}
 	for k, v := range s.registry.items {
-		c := &ClientInfo{Id: k.String()}
+		c := &ClientInfo{ID: k.String()}
 		ret = append(ret, c)
 		if v == voidRegistryItem {
 			s.logger.Log(

@@ -20,7 +20,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hons82/go-http-tunnel"
+	tunnel "github.com/hons82/go-http-tunnel"
+	"github.com/hons82/go-http-tunnel/connection"
 	"github.com/hons82/go-http-tunnel/log"
 	"github.com/hons82/go-http-tunnel/proto"
 )
@@ -95,6 +96,9 @@ func makeTunnelServer(t testing.TB) *tunnel.Server {
 		AutoSubscribe: true,
 		TLSConfig:     tlsConfig(),
 		Logger:        log.NewStdLogger(),
+		KeepAlive: connection.KeepAliveConfig{
+			KeepAliveInterval: connection.DefaultKeepAliveInterval,
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -137,6 +141,9 @@ func makeTunnelClient(t testing.TB, serverAddr string, httpLocalAddr, httpAddr, 
 			TCP:  tcpProxy.Proxy,
 		}),
 		Logger: log.NewStdLogger(),
+		KeepAlive: connection.KeepAliveConfig{
+			KeepAliveInterval: connection.DefaultKeepAliveInterval,
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
