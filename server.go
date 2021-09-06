@@ -22,6 +22,7 @@ import (
 	"github.com/mmatczuk/go-http-tunnel/id"
 	"github.com/mmatczuk/go-http-tunnel/log"
 	"github.com/mmatczuk/go-http-tunnel/proto"
+	"github.com/pableeee/processor/pkg/queue"
 )
 
 // ServerConfig defines configuration for the Server.
@@ -41,6 +42,12 @@ type ServerConfig struct {
 	Logger log.Logger
 	// Addr is TCP address to listen for TLS SNI connections
 	SNIAddr string
+
+	PublisherAddr string
+
+	PublisherPort int
+
+	PublishTopic string
 }
 
 // Server is responsible for proxying public connections to the client over a
@@ -54,6 +61,7 @@ type Server struct {
 	httpClient *http.Client
 	logger     log.Logger
 	vhostMuxer *vhost.TLSMuxer
+	publisher  queue.Publisher
 }
 
 // NewServer creates a new Server.
@@ -68,11 +76,17 @@ func NewServer(config *ServerConfig) (*Server, error) {
 		logger = log.NewNopLogger()
 	}
 
+	p, err := queue.NewNatsPublisher(config.PublisherAddr, config.PublisherPort)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create nats publisher %w", err)
+	}
+
 	s := &Server{
-		registry: newRegistry(logger),
-		config:   config,
-		listener: listener,
-		logger:   logger,
+		registry:  newRegistry(logger),
+		config:    config,
+		listener:  listener,
+		logger:    logger,
+		publisher: p,
 	}
 
 	t := &http2.Transport{}
@@ -238,6 +252,8 @@ func (s *Server) handleClient(conn net.Conn) {
 		ok         bool
 
 		inConnPool bool
+		b          []byte
+		m          map[string]string
 	)
 
 	tlsConn, ok := conn.(*tls.Conn)
@@ -368,6 +384,39 @@ func (s *Server) handleClient(conn net.Conn) {
 	logger.Log(
 		"level", 1,
 		"action", "connected",
+	)
+
+	m = map[string]string{
+		"event": "subscribe",
+		"id":    identifier.String(),
+	}
+
+	b, err = json.Marshal(m)
+	if err != nil {
+
+		logger.Log(
+			"level", 2,
+			"msg", fmt.Sprintf("unable to marshal prometheus update message: %s", err.Error()),
+			"err", err,
+		)
+
+		goto reject
+	}
+
+	if err = s.publisher.Publish(s.config.PublishTopic, b); err != nil {
+		logger.Log(
+			"level", 2,
+			"msg", fmt.Sprintf("unable to pusblish prometheus update message: %s", err.Error()),
+			"err", err,
+		)
+
+		goto reject
+	}
+
+	logger.Log(
+		"level", 1,
+		"msg", fmt.Sprintf("prometheus update message pusblished: %s", string(b)),
+		"err", err,
 	)
 
 	return

@@ -15,7 +15,7 @@ import (
 
 	"golang.org/x/net/http2"
 
-	"github.com/mmatczuk/go-http-tunnel"
+	tunnel "github.com/mmatczuk/go-http-tunnel"
 	"github.com/mmatczuk/go-http-tunnel/id"
 	"github.com/mmatczuk/go-http-tunnel/log"
 )
@@ -46,6 +46,9 @@ func main() {
 		AutoSubscribe: autoSubscribe,
 		TLSConfig:     tlsconf,
 		Logger:        logger,
+		PublisherAddr: opts.natsAddr,
+		PublisherPort: opts.natsPort,
+		PublishTopic:  opts.publishTopic,
 	})
 	if err != nil {
 		fatal("failed to create server: %s", err)

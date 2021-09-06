@@ -38,16 +38,19 @@ func init() {
 
 // options specify arguments read command line arguments.
 type options struct {
-	httpAddr   string
-	httpsAddr  string
-	tunnelAddr string
-	sniAddr    string
-	tlsCrt     string
-	tlsKey     string
-	rootCA     string
-	clients    string
-	logLevel   int
-	version    bool
+	httpAddr     string
+	httpsAddr    string
+	tunnelAddr   string
+	sniAddr      string
+	tlsCrt       string
+	tlsKey       string
+	rootCA       string
+	clients      string
+	logLevel     int
+	version      bool
+	natsAddr     string
+	natsPort     int
+	publishTopic string
 }
 
 func parseArgs() *options {
@@ -61,18 +64,24 @@ func parseArgs() *options {
 	clients := flag.String("clients", "", "Comma-separated list of tunnel client ids, if empty accept all clients")
 	logLevel := flag.Int("log-level", 1, "Level of messages to log, 0-3")
 	version := flag.Bool("version", false, "Prints tunneld version")
+	natsAddr := flag.String("natsAddr", "localhost", "Prints tunneld version")
+	natsPort := flag.Int("natsPort", 4222, "Prints tunneld version")
+	publishTopic := flag.String("publishTopic", "test", "Prints tunneld version")
 	flag.Parse()
 
 	return &options{
-		httpAddr:   *httpAddr,
-		httpsAddr:  *httpsAddr,
-		tunnelAddr: *tunnelAddr,
-		sniAddr:    *sniAddr,
-		tlsCrt:     *tlsCrt,
-		tlsKey:     *tlsKey,
-		rootCA:     *rootCA,
-		clients:    *clients,
-		logLevel:   *logLevel,
-		version:    *version,
+		httpAddr:     *httpAddr,
+		httpsAddr:    *httpsAddr,
+		tunnelAddr:   *tunnelAddr,
+		sniAddr:      *sniAddr,
+		tlsCrt:       *tlsCrt,
+		tlsKey:       *tlsKey,
+		rootCA:       *rootCA,
+		clients:      *clients,
+		logLevel:     *logLevel,
+		version:      *version,
+		natsAddr:     *natsAddr,
+		natsPort:     *natsPort,
+		publishTopic: *publishTopic,
 	}
 }
