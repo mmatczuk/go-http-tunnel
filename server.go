@@ -18,6 +18,7 @@ import (
 
 	"golang.org/x/net/http2"
 
+	"github.com/bep/debounce"
 	"github.com/hons82/go-http-tunnel/connection"
 	"github.com/hons82/go-http-tunnel/id"
 	"github.com/hons82/go-http-tunnel/log"
@@ -57,6 +58,14 @@ type Server struct {
 	httpClient *http.Client
 	logger     log.Logger
 	vhostMuxer *vhost.TLSMuxer
+
+	debounce Debounced
+}
+
+// Debounced Hold IDs that are disconnected for a short time before executing the function.
+type Debounced struct {
+	debounced       func(f func())
+	disconnectedIDs []id.ID
 }
 
 // NewServer creates a new Server.
@@ -71,11 +80,16 @@ func NewServer(config *ServerConfig) (*Server, error) {
 		logger = log.NewNopLogger()
 	}
 
+	debounced := &Debounced{
+		debounced: debounce.New(1000 * time.Millisecond),
+	}
+
 	s := &Server{
 		registry: newRegistry(logger),
 		config:   config,
 		listener: listener,
 		logger:   logger,
+		debounce: *debounced,
 	}
 
 	t := &http2.Transport{}
@@ -158,11 +172,18 @@ func listener(config *ServerConfig) (net.Listener, error) {
 // disconnected clears resources used by client, it's invoked by connection pool
 // when client goes away.
 func (s *Server) disconnected(identifier id.ID) {
-	s.logger.Log(
-		"level", 1,
-		"action", "disconnected",
-		"identifier", identifier,
-	)
+	s.debounce.disconnectedIDs = append(s.debounce.disconnectedIDs, identifier)
+
+	s.debounce.debounced(func() {
+		for _, id := range s.debounce.disconnectedIDs {
+			s.logger.Log(
+				"level", 1,
+				"action", "disconnected",
+				"identifier", id,
+			)
+		}
+		s.debounce.disconnectedIDs = nil
+	})
 
 	i := s.registry.clear(identifier)
 	if i == nil {
@@ -233,7 +254,7 @@ func (s *Server) handleClient(conn net.Conn) {
 	logger := log.NewContext(s.logger).With("remote addr", conn.RemoteAddr())
 
 	logger.Log(
-		"level", 1,
+		"level", 2,
 		"action", "try connect",
 	)
 
@@ -246,6 +267,9 @@ func (s *Server) handleClient(conn net.Conn) {
 		ok         bool
 
 		inConnPool bool
+
+		remainingIDs []id.ID
+		found        bool
 	)
 
 	tlsConn, ok := conn.(*tls.Conn)
@@ -373,10 +397,19 @@ func (s *Server) handleClient(conn net.Conn) {
 		goto reject
 	}
 
-	logger.Log(
-		"level", 1,
-		"action", "connected",
-	)
+	remainingIDs, found = id.Remove(s.debounce.disconnectedIDs, identifier)
+	if found {
+		s.debounce.disconnectedIDs = remainingIDs
+		logger.Log(
+			"level", 2,
+			"action", "reconnected",
+		)
+	} else {
+		logger.Log(
+			"level", 1,
+			"action", "connected",
+		)
+	}
 
 	return
 

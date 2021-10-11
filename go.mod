@@ -3,6 +3,7 @@ module github.com/hons82/go-http-tunnel
 go 1.13
 
 require (
+	github.com/bep/debounce v1.2.0
 	github.com/calmh/luhn v2.0.0+incompatible
 	github.com/cenkalti/backoff v2.1.1+incompatible
 	github.com/golang/mock v1.2.0

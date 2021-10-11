@@ -173,7 +173,7 @@ Configuration options:
     * `multiplier`: interval multiplier if reconnect failed, *default:* `1.5`
     * `max_interval`: maximal time client would wait before redialing the server, *default:* `1m`
     * `max_time`: maximal time client would try to reconnect to the server if connection was lost, set `0` to never stop trying, *default:* `15m`
-* `keep_alive`**
+* `keep_alive`
      * `interval`: the amount of time to wait between sending keepalive packets, *default:* `25s`
 
 ## Configuration - Server
