@@ -13,9 +13,11 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"golang.org/x/net/http2"
 
+	"github.com/bep/debounce"
 	tunnel "github.com/hons82/go-http-tunnel"
 	"github.com/hons82/go-http-tunnel/connection"
 	"github.com/hons82/go-http-tunnel/id"
@@ -46,6 +48,14 @@ func main() {
 		fatal("failed to parse KeepaliveConfig: %s", err)
 	}
 
+	debounceLog, err := time.ParseDuration(opts.debounceLog)
+	if err != nil {
+		fatal("failed to parse keepalive interval [%s], [%v]", opts.debounceLog, err)
+	}
+	debounced := &tunnel.Debounced{
+		Execute: debounce.New(debounceLog),
+	}
+
 	// setup server
 	server, err := tunnel.NewServer(&tunnel.ServerConfig{
 		Addr:          opts.tunnelAddr,
@@ -54,6 +64,7 @@ func main() {
 		TLSConfig:     tlsconf,
 		Logger:        logger,
 		KeepAlive:     *keepAlive,
+		Debounce:      *debounced,
 	})
 	if err != nil {
 		fatal("failed to create server: %s", err)

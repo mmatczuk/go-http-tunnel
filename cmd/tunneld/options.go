@@ -39,18 +39,19 @@ func init() {
 
 // options specify arguments read command line arguments.
 type options struct {
-	httpAddr   string
-	httpsAddr  string
-	tunnelAddr string
-	apiAddr    string
-	sniAddr    string
-	tlsCrt     string
-	tlsKey     string
-	rootCA     string
-	clients    string
-	keepAlive  string
-	logLevel   int
-	version    bool
+	httpAddr    string
+	httpsAddr   string
+	tunnelAddr  string
+	apiAddr     string
+	sniAddr     string
+	tlsCrt      string
+	tlsKey      string
+	rootCA      string
+	clients     string
+	keepAlive   string
+	debounceLog string
+	logLevel    int
+	version     bool
 }
 
 func parseArgs() *options {
@@ -64,22 +65,24 @@ func parseArgs() *options {
 	rootCA := flag.String("rootCA", "", "Path to the trusted certificate chian used for client certificate authentication, if empty any client certificate is accepted")
 	clients := flag.String("clients", "", "Comma-separated list of tunnel client ids, if empty accept all clients")
 	keepAlive := flag.String("keepAlive", "45s", "TCP keep alive configuration")
+	debounceLog := flag.String("debounceLog", "2s", "How long to keep disconnected log message before actually writing it to the log")
 	logLevel := flag.Int("logLevel", 1, "Level of messages to log, 0-3")
 	version := flag.Bool("version", false, "Prints tunneld version")
 	flag.Parse()
 
 	return &options{
-		httpAddr:   *httpAddr,
-		httpsAddr:  *httpsAddr,
-		tunnelAddr: *tunnelAddr,
-		apiAddr:    *apiAddr,
-		sniAddr:    *sniAddr,
-		tlsCrt:     *tlsCrt,
-		tlsKey:     *tlsKey,
-		rootCA:     *rootCA,
-		clients:    *clients,
-		keepAlive:  *keepAlive,
-		logLevel:   *logLevel,
-		version:    *version,
+		httpAddr:    *httpAddr,
+		httpsAddr:   *httpsAddr,
+		tunnelAddr:  *tunnelAddr,
+		apiAddr:     *apiAddr,
+		sniAddr:     *sniAddr,
+		tlsCrt:      *tlsCrt,
+		tlsKey:      *tlsKey,
+		rootCA:      *rootCA,
+		clients:     *clients,
+		keepAlive:   *keepAlive,
+		debounceLog: *debounceLog,
+		logLevel:    *logLevel,
+		version:     *version,
 	}
 }

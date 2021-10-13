@@ -18,7 +18,6 @@ import (
 
 	"golang.org/x/net/http2"
 
-	"github.com/bep/debounce"
 	"github.com/hons82/go-http-tunnel/connection"
 	"github.com/hons82/go-http-tunnel/id"
 	"github.com/hons82/go-http-tunnel/log"
@@ -28,16 +27,13 @@ import (
 
 // ServerConfig defines configuration for the Server.
 type ServerConfig struct {
-	// Addr is TCP address to listen for client connections. If empty ":0"
-	// is used.
+	// Addr is TCP address to listen for client connections. If empty ":0" is used.
 	Addr string
-	// AutoSubscribe if enabled will automatically subscribe new clients on
-	// first call.
+	// AutoSubscribe if enabled will automatically subscribe new clients on first call.
 	AutoSubscribe bool
 	// TLSConfig specifies the tls configuration to use with tls.Listener.
 	TLSConfig *tls.Config
-	// Listener specifies optional listener for client connections. If nil
-	// tls.Listen("tcp", Addr, TLSConfig) is used.
+	// Listener specifies optional listener for client connections. If nil tls.Listen("tcp", Addr, TLSConfig) is used.
 	Listener net.Listener
 	// Logger is optional logger. If nil logging is disabled.
 	Logger log.Logger
@@ -45,26 +41,26 @@ type ServerConfig struct {
 	SNIAddr string
 	// Used to configure the keepalive for the server -> client tcp connection
 	KeepAlive connection.KeepAliveConfig
+	// How long should a disconnected message been hold before sending it to the log
+	Debounce Debounced
 }
 
 // Server is responsible for proxying public connections to the client over a
 // tunnel connection.
 type Server struct {
 	*registry
-	config *ServerConfig
-
+	config     *ServerConfig
 	listener   net.Listener
 	connPool   *connPool
 	httpClient *http.Client
 	logger     log.Logger
+	debounce   Debounced
 	vhostMuxer *vhost.TLSMuxer
-
-	debounce Debounced
 }
 
 // Debounced Hold IDs that are disconnected for a short time before executing the function.
 type Debounced struct {
-	debounced       func(f func())
+	Execute         func(f func())
 	disconnectedIDs []id.ID
 }
 
@@ -80,16 +76,12 @@ func NewServer(config *ServerConfig) (*Server, error) {
 		logger = log.NewNopLogger()
 	}
 
-	debounced := &Debounced{
-		debounced: debounce.New(1000 * time.Millisecond),
-	}
-
 	s := &Server{
 		registry: newRegistry(logger),
 		config:   config,
 		listener: listener,
 		logger:   logger,
-		debounce: *debounced,
+		debounce: config.Debounce,
 	}
 
 	t := &http2.Transport{}
@@ -169,12 +161,11 @@ func listener(config *ServerConfig) (net.Listener, error) {
 	return net.Listen("tcp", config.Addr)
 }
 
-// disconnected clears resources used by client, it's invoked by connection pool
-// when client goes away.
+// disconnected clears resources used by client, it's invoked by connection pool when client goes away.
 func (s *Server) disconnected(identifier id.ID) {
 	s.debounce.disconnectedIDs = append(s.debounce.disconnectedIDs, identifier)
 
-	s.debounce.debounced(func() {
+	s.debounce.Execute(func() {
 		for _, id := range s.debounce.disconnectedIDs {
 			s.logger.Log(
 				"level", 1,
@@ -612,15 +603,18 @@ func (s *Server) listen(l net.Listener, identifier id.ID) {
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resp, err := s.RoundTrip(r)
 	if err != nil {
+		level := 0
 		code := http.StatusBadGateway
 		if err == errUnauthorised {
 			w.Header().Set("WWW-Authenticate", "Basic realm=\"User Visible Realm\"")
+			level = 1
 			code = http.StatusUnauthorized
 		} else if err == errClientNotSubscribed {
+			level = 2
 			code = http.StatusNotFound
 		}
 		s.logger.Log(
-			"level", 0,
+			"level", level,
 			"action", "round trip failed",
 			"addr", r.RemoteAddr,
 			"host", r.Host,
