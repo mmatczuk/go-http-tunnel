@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"golang.org/x/net/http2"
@@ -20,7 +19,7 @@ import (
 	"github.com/bep/debounce"
 	tunnel "github.com/hons82/go-http-tunnel"
 	"github.com/hons82/go-http-tunnel/connection"
-	"github.com/hons82/go-http-tunnel/id"
+	"github.com/hons82/go-http-tunnel/fileutil"
 	"github.com/hons82/go-http-tunnel/log"
 )
 
@@ -71,16 +70,15 @@ func main() {
 	}
 
 	if !autoSubscribe {
-		for _, c := range strings.Split(opts.clients, ",") {
-			if c == "" {
-				fatal("empty client id")
+		clients, err := fileutil.ReadPropertiesFile(opts.clients)
+		if err != nil {
+			fatal("failed to load clients: %s", err)
+		}
+
+		for host, value := range clients {
+			if err := server.RegisterTunnel(host, value); err != nil {
+				fatal("failed to load tunnel: %s with error %s", host, err)
 			}
-			identifier := id.ID{}
-			err := identifier.UnmarshalText([]byte(c))
-			if err != nil {
-				fatal("invalid identifier %q: %s", c, err)
-			}
-			server.Subscribe(identifier)
 		}
 	}
 
@@ -103,6 +101,9 @@ func main() {
 	// start HTTP
 	if opts.httpAddr != "" {
 		go func() {
+			s := &http.Server{
+				Addr: opts.httpAddr,
+			}
 			if opts.httpsAddr != "" {
 				logger.Log(
 					"level", 1,
@@ -114,19 +115,17 @@ func main() {
 				if err != nil {
 					fatal("failed to get https port: %s", err)
 				}
-				fatal("failed to start HTTP: %s",
-					http.ListenAndServe(opts.httpAddr, http.HandlerFunc(
-						func(w http.ResponseWriter, r *http.Request) {
-							host, _, err := net.SplitHostPort(r.Host)
-							if err != nil {
-								host = r.Host
-							}
-							u := r.URL
-							u.Host = net.JoinHostPort(host, tlsPort)
-							u.Scheme = "https"
-							http.Redirect(w, r, u.String(), http.StatusMovedPermanently)
-						},
-					)),
+				s.Handler = http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						host, _, err := net.SplitHostPort(r.Host)
+						if err != nil {
+							host = r.Host
+						}
+						u := r.URL
+						u.Host = net.JoinHostPort(host, tlsPort)
+						u.Scheme = "https"
+						http.Redirect(w, r, u.String(), http.StatusMovedPermanently)
+					},
 				)
 			} else {
 				logger.Log(
@@ -134,9 +133,9 @@ func main() {
 					"action", "start http",
 					"addr", opts.httpAddr,
 				)
-
-				fatal("failed to start HTTP: %s", http.ListenAndServe(opts.httpAddr, server))
+				s.Handler = server
 			}
+			fatal("failed to start HTTP: %s", s.ListenAndServe())
 		}()
 	}
 

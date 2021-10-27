@@ -163,20 +163,28 @@ func listener(config *ServerConfig) (net.Listener, error) {
 
 // disconnected clears resources used by client, it's invoked by connection pool when client goes away.
 func (s *Server) disconnected(identifier id.ID) {
-	s.debounce.disconnectedIDs = append(s.debounce.disconnectedIDs, identifier)
+	if s.debounce.Execute != nil {
+		s.debounce.disconnectedIDs = append(s.debounce.disconnectedIDs, identifier)
 
-	s.debounce.Execute(func() {
-		for _, id := range s.debounce.disconnectedIDs {
-			s.logger.Log(
-				"level", 1,
-				"action", "disconnected",
-				"identifier", id,
-			)
-		}
-		s.debounce.disconnectedIDs = nil
-	})
+		s.debounce.Execute(func() {
+			for _, id := range s.debounce.disconnectedIDs {
+				s.logger.Log(
+					"level", 1,
+					"action", "disconnected",
+					"identifier", id,
+				)
+			}
+			s.debounce.disconnectedIDs = nil
+		})
+	} else {
+		s.logger.Log(
+			"level", 1,
+			"action", "disconnected",
+			"identifier", identifier,
+		)
+	}
 
-	i := s.registry.clear(identifier)
+	i := s.unsubscribe(identifier)
 	if i == nil {
 		return
 	}
@@ -189,6 +197,13 @@ func (s *Server) disconnected(identifier id.ID) {
 		)
 		l.Close()
 	}
+}
+
+func (s *Server) unsubscribe(identifier id.ID) *RegistryItem {
+	if s.config.AutoSubscribe {
+		return s.registry.Unsubscribe(identifier)
+	}
+	return s.registry.clear(identifier)
 }
 
 // Start starts accepting connections form clients. For accepting http traffic
@@ -225,7 +240,7 @@ func (s *Server) Start() {
 
 		s.logger.Log(
 			"level", 2,
-			"msg", fmt.Sprintf("Setting up keep alive using config: %v", s.config.KeepAlive.String()),
+			"msg", fmt.Sprintf("setting up keep alive using config: %v", s.config.KeepAlive.String()),
 		)
 
 		if err := s.config.KeepAlive.Set(conn); err != nil {
@@ -251,6 +266,7 @@ func (s *Server) handleClient(conn net.Conn) {
 
 	var (
 		identifier id.ID
+		IDInfo     id.IDInfo
 		req        *http.Request
 		resp       *http.Response
 		tunnels    map[string]*proto.Tunnel
@@ -273,7 +289,7 @@ func (s *Server) handleClient(conn net.Conn) {
 		goto reject
 	}
 
-	identifier, err = id.PeerID(tlsConn)
+	identifier, IDInfo, err = id.PeerID(tlsConn)
 	if err != nil {
 		logger.Log(
 			"level", 2,
@@ -379,7 +395,16 @@ func (s *Server) handleClient(conn net.Conn) {
 		goto reject
 	}
 
-	if err = s.addTunnels(tunnels, identifier); err != nil {
+	if err = s.hasTunnels(tunnels, identifier); err != nil {
+		logger.Log(
+			"level", 2,
+			"msg", "tunnel check failed",
+			"err", err,
+		)
+		goto reject
+	}
+
+	if err = s.addTunnels(tunnels, identifier, IDInfo); err != nil {
 		logger.Log(
 			"level", 2,
 			"msg", "handshake failed",
@@ -443,10 +468,25 @@ func (s *Server) notifyError(serverError error, identifier id.ID) {
 	s.httpClient.Do(req.WithContext(ctx))
 }
 
+func (s *Server) hasTunnels(tunnels map[string]*proto.Tunnel, identifier id.ID) error {
+	var err error
+	for name, t := range tunnels {
+		// Check the current tunnel
+		// AutoSubscribe --> Tunnel not yet registered (means that it isn't already opened)
+		// !AutoSubscribe -> Tunnel has to be already registered, and therefore allowed to be opened
+		if s.config.AutoSubscribe == s.HasTunnel(t.Host, identifier) {
+			err = fmt.Errorf("tunnel %s not allowed for %s", name, identifier)
+			break
+		}
+	}
+	return err
+}
+
 // addTunnels invokes addHost or addListener based on data from proto.Tunnel. If
 // a tunnel cannot be added whole batch is reverted.
-func (s *Server) addTunnels(tunnels map[string]*proto.Tunnel, identifier id.ID) error {
+func (s *Server) addTunnels(tunnels map[string]*proto.Tunnel, identifier id.ID, IDInfo id.IDInfo) error {
 	i := &RegistryItem{
+		IDInfo:    &IDInfo,
 		Hosts:     []*HostAuth{},
 		Listeners: []net.Listener{},
 	}
@@ -515,9 +555,9 @@ rollback:
 	return err
 }
 
-// Unsubscribe removes client from registry, disconnects client if already
+// Disconnect removes client from registry, disconnects client if already
 // connected and returns it's RegistryItem.
-func (s *Server) Unsubscribe(identifier id.ID) *RegistryItem {
+func (s *Server) Disconnect(identifier id.ID) *RegistryItem {
 	s.connPool.DeleteConn(identifier)
 	return s.registry.Unsubscribe(identifier)
 }
@@ -563,7 +603,7 @@ func (s *Server) listen(l net.Listener, identifier id.ID) {
 
 		s.logger.Log(
 			"level", 1,
-			"msg", fmt.Sprintf("Setting up keep alive using config: %v", s.config.KeepAlive.String()),
+			"msg", fmt.Sprintf("setting up keep alive using config: %v", s.config.KeepAlive.String()),
 		)
 
 		if ok {
@@ -847,6 +887,7 @@ type ListenerInfo struct {
 // ClientInfo info about the client
 type ClientInfo struct {
 	ID        string
+	IDInfo    id.IDInfo
 	Listeners []*ListenerInfo
 	Hosts     []string
 }
@@ -857,7 +898,9 @@ func (s *Server) GetClientInfo() []*ClientInfo {
 	defer s.registry.mu.Unlock()
 	ret := []*ClientInfo{}
 	for k, v := range s.registry.items {
-		c := &ClientInfo{ID: k.String()}
+		c := &ClientInfo{
+			ID: k.String(),
+		}
 		ret = append(ret, c)
 		if v == voidRegistryItem {
 			s.logger.Log(
@@ -866,6 +909,7 @@ func (s *Server) GetClientInfo() []*ClientInfo {
 				"msg", "void registry item",
 			)
 		} else {
+			c.IDInfo = *v.IDInfo
 			for _, l := range v.Hosts {
 				c.Hosts = append(c.Hosts, l.Host)
 			}

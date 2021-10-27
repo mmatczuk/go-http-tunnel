@@ -177,7 +177,7 @@ func (c *Client) dial() (net.Conn, error) {
 			if err == nil {
 				c.logger.Log(
 					"level", 1,
-					"msg", fmt.Sprintf("Setting up keep alive using config: %v", c.config.KeepAlive.String()),
+					"msg", fmt.Sprintf("setting up keep alive using config: %v", c.config.KeepAlive.String()),
 				)
 				err = c.config.KeepAlive.Set(conn)
 			}

@@ -51,7 +51,7 @@ check: .check-fmt .check-vet .check-lint .check-ineffassign .check-static .check
 
 .PHONY: .check-vendor
 .check-vendor:
-	@dep ensure -no-vendor -dry-run
+	@go mod vendor
 
 .PHONY: test
 test:
@@ -61,12 +61,11 @@ test:
 .PHONY: get-deps
 get-deps:
 	@echo "==> Installing dependencies..."
-	@dep ensure
+	@go mod init
 
 .PHONY: get-tools
 get-tools:
 	@echo "==> Installing tools..."
-	@go get -u github.com/golang/dep/cmd/dep
 	@go get -u golang.org/x/lint/golint
 	@go get -u github.com/golang/mock/gomock
 
