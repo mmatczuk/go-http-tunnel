@@ -17,6 +17,10 @@ Common use cases:
 * Developing webhook integrations
 * Managing IoT devices
 
+## Project Status
+
+IF YOU WOULD LIKE TO SEE THIS PROJECT MODERNIZED PLEASE [UPVOTE THE ISSUE](https://github.com/mmatczuk/go-http-tunnel/issues/142).
+
 ## Installation
 
 Build the latest version.
