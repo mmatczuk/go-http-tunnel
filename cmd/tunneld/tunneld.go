@@ -151,6 +151,10 @@ func main() {
 			s := &http.Server{
 				Addr:    opts.httpsAddr,
 				Handler: server,
+				TLSConfig: &tls.Config{
+					MinVersion:               tls.VersionTLS12,
+					PreferServerCipherSuites: true,
+				},
 			}
 			http2.ConfigureServer(s, nil)
 
