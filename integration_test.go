@@ -329,14 +329,12 @@ func tlsConfig() *tls.Config {
 	}
 
 	c := &tls.Config{
-		Certificates:             []tls.Certificate{cert},
-		ClientAuth:               tls.RequireAnyClientCert,
-		SessionTicketsDisabled:   true,
-		InsecureSkipVerify:       true,
-		MinVersion:               tls.VersionTLS12,
-		CipherSuites:             []uint16{tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256},
-		PreferServerCipherSuites: true,
-		NextProtos:               []string{"h2"},
+		Certificates:           []tls.Certificate{cert},
+		ClientAuth:             tls.RequireAnyClientCert,
+		SessionTicketsDisabled: true,
+		InsecureSkipVerify:     true,
+		MinVersion:             tls.VersionTLS12,
+		NextProtos:             []string{"h2"},
 	}
 	c.BuildNameToCertificate()
 	return c
