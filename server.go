@@ -719,6 +719,20 @@ func (s *Server) Upgrade(identifier id.ID, conn net.Conn, requestBytes []byte) e
 
 // ServeHTTP proxies http connection to the client.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if strings.EqualFold(r.Method, "TRACE") {
+		s.logger.Log(
+			"level", 2,
+			"action", "method not allowed",
+			"method", r.Method,
+			"addr", r.RemoteAddr,
+			"host", r.Host,
+			"url", r.URL,
+		)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
 	resp, err := s.RoundTrip(r)
 	if err != nil {
 		level := 0
