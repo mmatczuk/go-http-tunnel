@@ -26,7 +26,7 @@ import (
 	"github.com/inconshreveable/go-vhost"
 )
 
-// A set of listeners to manage subscribers
+// SubscriptionListener A set of listeners to manage subscribers
 type SubscriptionListener interface {
 	// Invoked if AutoSubscribe is false and must return true if the client is allowed to subscribe or not.
 	// If the tlsConfig is configured to require client certificate validation, chain will contain the first
@@ -672,6 +672,7 @@ func (s *Server) listen(l net.Listener, identifier id.ID) {
 	}
 }
 
+// Upgrade the connection
 func (s *Server) Upgrade(identifier id.ID, conn net.Conn, requestBytes []byte) error {
 
 	var err error
