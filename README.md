@@ -190,7 +190,7 @@ Configuration options:
 * `tlsCrt`: Path to a TLS certificate file, *default:* `server.crt`
 * `tlsKey`: Path to a TLS key file, *default:* `server.key`
 * `rootCA`: Path to the trusted certificate chian used for client certificate authentication, if empty any client certificate is accepted
-* `clients`: Comma-separated list of tunnel client ids, if empty accept all clients
+* `clients`: Path to a properties file that contains a list of 'host=tunnelClientId's, if empty accept all clients
 * `keepAlive`: the amount of time to wait between sending keepalive packets *default:* `45s`
 * `logLevel`: Level of messages to log, 0-3, *default:* 1
 

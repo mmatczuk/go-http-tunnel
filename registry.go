@@ -64,7 +64,7 @@ func (r *registry) Subscribe(identifier id.ID) {
 	}
 
 	r.logger.Log(
-		"level", 1,
+		"level", 2,
 		"action", "subscribe",
 		"identifier", identifier,
 	)
@@ -103,17 +103,17 @@ func (r *registry) HasTunnel(hostPort string, identifier id.ID) bool {
 }
 
 // Unsubscribe removes client from registry and returns it's RegistryItem.
-func (r *registry) Unsubscribe(identifier id.ID) *RegistryItem {
+func (r *registry) Unsubscribe(identifier id.ID, autoSubscribe bool) *RegistryItem {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	i, ok := r.items[identifier]
-	if !ok {
+	if !ok || (autoSubscribe && i == voidRegistryItem) {
 		return nil
 	}
 
 	r.logger.Log(
-		"level", 1,
+		"level", 2,
 		"action", "unsubscribe",
 		"identifier", identifier,
 	)
@@ -124,7 +124,11 @@ func (r *registry) Unsubscribe(identifier id.ID) *RegistryItem {
 		}
 	}
 
-	delete(r.items, identifier)
+	if autoSubscribe {
+		delete(r.items, identifier)
+	} else {
+		r.items[identifier] = voidRegistryItem
+	}
 
 	return i
 }
@@ -174,9 +178,10 @@ func (r *registry) RegisterTunnel(host string, client string) error {
 	identifier := id.New([]byte(client))
 
 	r.logger.Log(
-		"level", 2,
-		"action", "add tunnel",
+		"level", 3,
+		"action", "register tunnel",
 		"host", host,
+		"client", client,
 		"identifier", identifier,
 	)
 
@@ -199,24 +204,23 @@ func (r *registry) RegisterTunnel(host string, client string) error {
 	return nil
 }
 
-func (r *registry) clear(identifier id.ID) *RegistryItem {
+// Clear removes all items from the registry
+func (r *registry) Clear() {
 	r.logger.Log(
-		"level", 2,
-		"action", "clear registry item",
-		"identifier", identifier,
+		"level", 3,
+		"action", "clear registry ",
 	)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	i, ok := r.items[identifier]
-	if !ok || i == voidRegistryItem {
-		return nil
+	for k := range r.hosts {
+		delete(r.hosts, k)
 	}
 
-	r.items[identifier] = voidRegistryItem
-
-	return i
+	for i := range r.items {
+		delete(r.items, i)
+	}
 }
 
 func trimPort(hostPort string) (host string) {

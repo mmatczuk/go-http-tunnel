@@ -20,6 +20,7 @@ import (
 	"golang.org/x/net/http2"
 
 	"github.com/hons82/go-http-tunnel/connection"
+	"github.com/hons82/go-http-tunnel/fileutil"
 	"github.com/hons82/go-http-tunnel/id"
 	"github.com/hons82/go-http-tunnel/log"
 	"github.com/hons82/go-http-tunnel/proto"
@@ -201,7 +202,7 @@ func (s *Server) disconnected(identifier id.ID) {
 		)
 	}
 
-	i := s.unsubscribe(identifier)
+	i := s.registry.Unsubscribe(identifier, s.config.AutoSubscribe)
 	if i == nil {
 		return
 	}
@@ -214,13 +215,6 @@ func (s *Server) disconnected(identifier id.ID) {
 		)
 		l.Close()
 	}
-}
-
-func (s *Server) unsubscribe(identifier id.ID) *RegistryItem {
-	if s.config.AutoSubscribe {
-		return s.registry.Unsubscribe(identifier)
-	}
-	return s.registry.clear(identifier)
 }
 
 // Start starts accepting connections form clients. For accepting http traffic
@@ -473,6 +467,30 @@ reject:
 	conn.Close()
 }
 
+// LoadAllowedTunnels registers allowed tunnels from a file
+func (s *Server) LoadAllowedTunnels(propertiesFile string) {
+	clients, err := fileutil.ReadPropertiesFile(propertiesFile)
+	if err != nil {
+		s.logger.Log(
+			"level", 1,
+			"action", "failed to load clients",
+			"err", err,
+		)
+		return
+	}
+
+	for host, value := range clients {
+		if err := s.RegisterTunnel(host, value); err != nil {
+			s.logger.Log(
+				"level", 2,
+				"action", "failed to load tunnel",
+				"host", host,
+				"err", err,
+			)
+		}
+	}
+}
+
 // notifyError tries to send error to client.
 func (s *Server) notifyError(serverError error, identifier id.ID) {
 	if serverError == nil {
@@ -592,7 +610,7 @@ func (s *Server) Unsubscribe(identifier id.ID) *RegistryItem {
 		s.config.SubscriptionListener.Unsubscribed(identifier)
 	}
 	s.connPool.DeleteConn(identifier)
-	return s.registry.Unsubscribe(identifier)
+	return s.registry.Unsubscribe(identifier, s.config.AutoSubscribe)
 }
 
 // Ping measures the RTT response time.

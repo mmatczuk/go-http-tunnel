@@ -17,9 +17,9 @@ import (
 	"golang.org/x/net/http2"
 
 	"github.com/bep/debounce"
+	"github.com/fsnotify/fsnotify"
 	tunnel "github.com/hons82/go-http-tunnel"
 	"github.com/hons82/go-http-tunnel/connection"
-	"github.com/hons82/go-http-tunnel/fileutil"
 	"github.com/hons82/go-http-tunnel/log"
 )
 
@@ -70,14 +70,59 @@ func main() {
 	}
 
 	if !autoSubscribe {
-		clients, err := fileutil.ReadPropertiesFile(opts.clients)
-		if err != nil {
-			fatal("failed to load clients: %s", err)
-		}
+		// First load immediatly
+		server.LoadAllowedTunnels(opts.clients)
 
-		for host, value := range clients {
-			if err := server.RegisterTunnel(host, value); err != nil {
-				fatal("failed to load tunnel: %s with error %s", host, err)
+		// Watch for the file to change
+		watcher, err := fsnotify.NewWatcher()
+		if err != nil {
+			fatal("NewWatcher failed: %s", err)
+			logger.Log(
+				"level", 1,
+				"action", "could not create file watcher",
+				"err", err,
+			)
+		} else {
+			defer watcher.Close()
+
+			go func() {
+				for {
+					select {
+					case event, ok := <-watcher.Events:
+						if !ok {
+							return
+						}
+						logger.Log(
+							"level", 3,
+							"action", "watched file changed",
+							"file", event.Name,
+							"action", event.Op.String(),
+						)
+						if event.Op&fsnotify.Write == fsnotify.Write {
+							server.Clear()
+							server.LoadAllowedTunnels(event.Name)
+						}
+					case err, ok := <-watcher.Errors:
+						if !ok {
+							return
+						}
+						logger.Log(
+							"level", 2,
+							"action", "error watching file",
+							"err", err,
+						)
+					}
+				}
+			}()
+
+			err = watcher.Add(opts.clients)
+			if err != nil {
+				logger.Log(
+					"level", 1,
+					"action", "add watch failed",
+					"file", opts.clients,
+					"err", err,
+				)
 			}
 		}
 	}

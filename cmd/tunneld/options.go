@@ -63,7 +63,7 @@ func parseArgs() *options {
 	tlsCrt := flag.String("tlsCrt", "server.crt", "Path to a TLS certificate file")
 	tlsKey := flag.String("tlsKey", "server.key", "Path to a TLS key file")
 	rootCA := flag.String("rootCA", "", "Path to the trusted certificate chian used for client certificate authentication, if empty any client certificate is accepted")
-	clients := flag.String("clients", "", "Comma-separated list of tunnel client ids, if empty accept all clients")
+	clients := flag.String("clients", "", "Path to a properties file that contains a list of 'host=tunnelClientId's, if empty accept all clients")
 	keepAlive := flag.String("keepAlive", "45s", "TCP keep alive configuration")
 	debounceLog := flag.String("debounceLog", "2s", "How long to keep disconnected log message before actually writing it to the log")
 	logLevel := flag.Int("logLevel", 1, "Level of messages to log, 0-3")
