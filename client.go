@@ -14,10 +14,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	"golang.org/x/net/http2"
 
-	"github.com/mmatczuk/go-http-tunnel/log"
-	"github.com/mmatczuk/go-http-tunnel/proto"
+	"github.com/hons82/go-http-tunnel/connection"
+	"github.com/hons82/go-http-tunnel/log"
+	"github.com/hons82/go-http-tunnel/proto"
 )
 
 // ClientConfig is configuration of the Client.
@@ -32,7 +34,7 @@ type ClientConfig struct {
 	DialTLS func(network, addr string, config *tls.Config) (net.Conn, error)
 	// Backoff specifies backoff policy on server connection retry. If nil
 	// when dial fails it will not be retried.
-	Backoff Backoff
+	Backoff connection.Backoff
 	// Tunnels specifies the tunnels client requests to be opened on server.
 	Tunnels map[string]*proto.Tunnel
 	// Proxy is ProxyFunc responsible for transferring data between server
@@ -40,6 +42,8 @@ type ClientConfig struct {
 	Proxy ProxyFunc
 	// Logger is optional logger. If nil logging is disabled.
 	Logger log.Logger
+	// Used to configure the tcp keepalive for the client -> server tcp connection
+	KeepAlive connection.KeepAliveConfig
 }
 
 // Client is responsible for creating connection to the server, handling control
@@ -95,7 +99,7 @@ func (c *Client) Start() error {
 		"level", 1,
 		"action", "start",
 	)
-
+	b := backoff.NewExponentialBackOff()
 	for {
 		conn, err := c.connect()
 		if err != nil {
@@ -112,17 +116,36 @@ func (c *Client) Start() error {
 		)
 
 		c.connMu.Lock()
-		now := time.Now()
 		err = c.serverErr
 
 		// detect disconnect hiccup
-		if err == nil && now.Sub(c.lastDisconnect).Seconds() < 5 {
+		if err == nil && time.Since(c.lastDisconnect).Seconds() < 5 {
 			err = fmt.Errorf("connection is being cut")
+		}
+
+		// Backoff
+		if b != nil {
+			if err != nil {
+				d := b.NextBackOff()
+				if d > 0 {
+					// backoff
+					c.logger.Log(
+						"level", 1,
+						"action", "backoff",
+						"sleep", d,
+						"err", err,
+					)
+					time.Sleep(d)
+					err = nil
+				}
+			} else {
+				b.Reset()
+			}
 		}
 
 		c.conn = nil
 		c.serverErr = nil
-		c.lastDisconnect = now
+		c.lastDisconnect = time.Now()
 		c.connMu.Unlock()
 
 		if err != nil {
@@ -172,7 +195,11 @@ func (c *Client) dial() (net.Conn, error) {
 			conn, err = d.Dial(network, addr)
 
 			if err == nil {
-				err = keepAlive(conn)
+				c.logger.Log(
+					"level", 1,
+					"msg", fmt.Sprintf("setting up keep alive using config: %v", c.config.KeepAlive.String()),
+				)
+				err = c.config.KeepAlive.Set(conn)
 			}
 			if err == nil {
 				conn = tls.Client(conn, tlsConfig)
@@ -204,13 +231,12 @@ func (c *Client) dial() (net.Conn, error) {
 	if b == nil {
 		return doDial()
 	}
-
+	b.Reset()
 	for {
 		conn, err := doDial()
 
 		// success
 		if err == nil {
-			b.Reset()
 			return conn, err
 		}
 

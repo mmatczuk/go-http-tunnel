@@ -13,14 +13,16 @@ import (
 	"net/url"
 	"os"
 	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v2"
 
 	"github.com/cenkalti/backoff"
-	"github.com/mmatczuk/go-http-tunnel"
-	"github.com/mmatczuk/go-http-tunnel/id"
-	"github.com/mmatczuk/go-http-tunnel/log"
-	"github.com/mmatczuk/go-http-tunnel/proto"
+	tunnel "github.com/hons82/go-http-tunnel"
+	"github.com/hons82/go-http-tunnel/connection"
+	"github.com/hons82/go-http-tunnel/id"
+	"github.com/hons82/go-http-tunnel/log"
+	"github.com/hons82/go-http-tunnel/proto"
 )
 
 func main() {
@@ -93,7 +95,12 @@ func main() {
 	if err != nil {
 		fatal("failed to dump config: %s", err)
 	}
-	logger.Log("config", string(b))
+	for _, value := range strings.Split(string(b), "\n") {
+		logger.Log(
+			"level", 1,
+			"config", value,
+		)
+	}
 
 	client, err := tunnel.NewClient(&tunnel.ClientConfig{
 		ServerAddr:      config.ServerAddr,
@@ -102,6 +109,7 @@ func main() {
 		Tunnels:         tunnels(config.Tunnels),
 		Proxy:           proxy(config.Tunnels, logger),
 		Logger:          logger,
+		KeepAlive:       config.KeepAlive,
 	})
 	if err != nil {
 		fatal("failed to create client: %s", err)
@@ -143,7 +151,7 @@ func tlsConfig(config *ClientConfig) (*tls.Config, error) {
 	}, nil
 }
 
-func expBackoff(c BackoffConfig) *backoff.ExponentialBackOff {
+func expBackoff(c connection.BackoffConfig) *backoff.ExponentialBackOff {
 	b := backoff.NewExponentialBackOff()
 	b.InitialInterval = c.Interval
 	b.Multiplier = c.Multiplier

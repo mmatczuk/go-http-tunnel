@@ -1,4 +1,4 @@
-# Go HTTP tunnel [![GoDoc](http://img.shields.io/badge/go-documentation-blue.svg)](http://godoc.org/github.com/mmatczuk/go-http-tunnel) [![Go Report Card](https://goreportcard.com/badge/github.com/mmatczuk/go-http-tunnel)](https://goreportcard.com/report/github.com/mmatczuk/go-http-tunnel) [![Build Status](http://img.shields.io/travis/mmatczuk/go-http-tunnel.svg?branch=master)](https://travis-ci.org/mmatczuk/go-http-tunnel) [![Github All Releases](https://img.shields.io/github/downloads/mmatczuk/go-http-tunnel/total.svg)](https://github.com/mmatczuk/go-http-tunnel/releases)
+# Go HTTP tunnel [![GoDoc](http://img.shields.io/badge/go-documentation-blue.svg)](http://godoc.org/github.com/hons82/go-http-tunnel) [![Go Report Card](https://goreportcard.com/badge/github.com/hons82/go-http-tunnel)](https://goreportcard.com/report/github.com/hons82/go-http-tunnel) [![Build Status](http://img.shields.io/travis/hons82/go-http-tunnel.svg?branch=master)](https://travis-ci.org/hons82/go-http-tunnel) [![Github All Releases](https://img.shields.io/github/downloads/hons82/go-http-tunnel/total.svg)](https://github.com/hons82/go-http-tunnel/releases)
 
 Go HTTP tunnel is a reverse tunnel based on HTTP/2. It enables you to share your localhost when you don't have a public IP.
 
@@ -26,10 +26,10 @@ IF YOU WOULD LIKE TO SEE THIS PROJECT MODERNIZED PLEASE [UPVOTE THE ISSUE](https
 Build the latest version.
 
 ```bash
-$ go get -u github.com/mmatczuk/go-http-tunnel/cmd/...
+$ go get -u github.com/hons82/go-http-tunnel/cmd/...
 ```
 
-Alternatively [download the latest release](https://github.com/mmatczuk/go-http-tunnel/releases/latest).
+Alternatively [download the latest release](https://github.com/hons82/go-http-tunnel/releases/latest).
 
 ## Running
 
@@ -47,7 +47,7 @@ $ openssl req -x509 -nodes -newkey rsa:2048 -sha256 -keyout client.key -out clie
 $ openssl req -x509 -nodes -newkey rsa:2048 -sha256 -keyout server.key -out server.crt
 ```
 
-Run client:
+### Run client:
 
 * Install `tunnel` binary
 * Make `.tunnel` directory in your project directory
@@ -59,7 +59,7 @@ Run client:
 $ tunnel -config ./tunnel/tunnel.yml start-all
 ```
 
-Run server:
+### Run server:
 
 * Install `tunneld` binary
 * Make `.tunneld` directory
@@ -131,7 +131,7 @@ $ sudo systemctl enable tunneld.service
 
 There are many more options for systemd services, and this is by not means an exhaustive configuration file.
 
-## Configuration
+## Configuration - Client
 
 The tunnel client `tunnel` requires configuration file, by default it will try reading `tunnel.yml` in your current working directory. If you want to specify other file use `-config` flag.
 
@@ -177,6 +177,53 @@ Configuration options:
     * `multiplier`: interval multiplier if reconnect failed, *default:* `1.5`
     * `max_interval`: maximal time client would wait before redialing the server, *default:* `1m`
     * `max_time`: maximal time client would try to reconnect to the server if connection was lost, set `0` to never stop trying, *default:* `15m`
+* `keep_alive`
+     * `interval`: the amount of time to wait between sending keepalive packets, *default:* `25s`
+
+## Configuration - Server
+
+* `httpAddr`: Public address for HTTP connections, empty string to disable,  *default:* `:80`
+* `httpsAddr`: Public address listening for HTTPS connections, emptry string to disable, *default:* `:443`
+* `tunnelAddr`: Public address listening for tunnel client, *default:* `:5223`
+* `apiAddr`: Public address for HTTP API to get info about the tunnels, *default:* `:5091`
+* `sniAddr`: Public address listening for TLS SNI connections, empty string to disable
+* `tlsCrt`: Path to a TLS certificate file, *default:* `server.crt`
+* `tlsKey`: Path to a TLS key file, *default:* `server.key`
+* `rootCA`: Path to the trusted certificate chian used for client certificate authentication, if empty any client certificate is accepted
+* `clients`: Path to a properties file that contains a list of 'host=tunnelClientId's, if empty accept all clients
+* `keepAlive`: the amount of time to wait between sending keepalive packets *default:* `45s`
+* `logLevel`: Level of messages to log, 0-3, *default:* 1
+
+If both `httpAddr` and `httpsAddr` are configured, an automatic redirect to the secure channel will be established using an `http.StatusMovedPermanently` (301)
+
+### Custom error pages
+
+Just copy the `html` folder from this repository into the folder of the tunnel-server to have a starting point. In the `html/errors` folder you'll find a sample page for each error that is currently customisable which you'll be able to change according to your needs.
+
+## Server API
+
+If the `apiAddr` is properly set, the tunnel server offers a simple API to query its state.
+
+### /api/clients/list
+
+Returns a list of `clients` together with a list of open tunnels in JSON format.
+
+```json
+[
+    {
+        "Id": "BHXWUUT-A6IYDWI-2BSIC5A-...",
+        "Listeners": [
+            {
+                "Network": "tcp",
+                "Addr": "192.0.2.1:25"
+            }
+        ],
+        "Hosts": [
+            "tunnel1.my-tunnel-host.com"
+        ]
+    }
+]
+```
 
 ## How it works
 
@@ -188,7 +235,7 @@ The tunnel is based HTTP/2 for speed and security. There is a single TCP connect
 
 If this project help you reduce time to develop, you can give me a cup of coffee.
 
-[![paypal](https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=RMM46NAEY7YZ6&lc=US&item_name=go%2dhttp%2dtunnel&currency_code=USD&bn=PP%2dDonationsBF%3abtn_donateCC_LG%2egif%3aNonHosted)
+[![paypal](https://www.paypalobjects.com/en_US/IT/i/btn/btn_donateCC_LG.gif)](https://www.paypal.com/donate?hosted_button_id=E74HP49TAAUQ2)
 
 A GitHub star is always appreciated!
 
@@ -196,4 +243,4 @@ A GitHub star is always appreciated!
 
 Copyright (C) 2017 Michał Matczuk
 
-This project is distributed under the AGPL-3 license. See the [LICENSE](https://github.com/mmatczuk/go-http-tunnel/blob/master/LICENSE) file for details. If you need an enterprice license contact me directly.
+This project is distributed under the AGPL-3 license. See the [LICENSE](https://github.com/hons82/go-http-tunnel/blob/master/LICENSE) file for details. If you need an enterprice license contact me directly.

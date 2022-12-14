@@ -20,9 +20,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mmatczuk/go-http-tunnel"
-	"github.com/mmatczuk/go-http-tunnel/log"
-	"github.com/mmatczuk/go-http-tunnel/proto"
+	tunnel "github.com/hons82/go-http-tunnel"
+	"github.com/hons82/go-http-tunnel/connection"
+	"github.com/hons82/go-http-tunnel/log"
+	"github.com/hons82/go-http-tunnel/proto"
 )
 
 const (
@@ -95,6 +96,9 @@ func makeTunnelServer(t testing.TB) *tunnel.Server {
 		AutoSubscribe: true,
 		TLSConfig:     tlsConfig(),
 		Logger:        log.NewStdLogger(),
+		KeepAlive: connection.KeepAliveConfig{
+			KeepAliveInterval: connection.DefaultKeepAliveInterval,
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -137,6 +141,9 @@ func makeTunnelClient(t testing.TB, serverAddr string, httpLocalAddr, httpAddr, 
 			TCP:  tcpProxy.Proxy,
 		}),
 		Logger: log.NewStdLogger(),
+		KeepAlive: connection.KeepAliveConfig{
+			KeepAliveInterval: connection.DefaultKeepAliveInterval,
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -322,14 +329,12 @@ func tlsConfig() *tls.Config {
 	}
 
 	c := &tls.Config{
-		Certificates:             []tls.Certificate{cert},
-		ClientAuth:               tls.RequireAnyClientCert,
-		SessionTicketsDisabled:   true,
-		InsecureSkipVerify:       true,
-		MinVersion:               tls.VersionTLS12,
-		CipherSuites:             []uint16{tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256},
-		PreferServerCipherSuites: true,
-		NextProtos:               []string{"h2"},
+		Certificates:           []tls.Certificate{cert},
+		ClientAuth:             tls.RequireAnyClientCert,
+		SessionTicketsDisabled: true,
+		InsecureSkipVerify:     true,
+		MinVersion:             tls.VersionTLS12,
+		NextProtos:             []string{"h2"},
 	}
 	c.BuildNameToCertificate()
 	return c

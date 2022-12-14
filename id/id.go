@@ -173,3 +173,23 @@ func untypeoify(s string) string {
 	s = strings.Replace(s, "8", "B", -1)
 	return s
 }
+
+// https://play.golang.org/p/Qg_uv_inCek
+// contains checks if a string is present in a slice
+func Contains(s []ID, item ID) bool {
+	for _, v := range s {
+		if v.Equals(item) {
+			return true
+		}
+	}
+	return false
+}
+
+func Remove(s []ID, item ID) ([]ID, bool) {
+	for i, v := range s {
+		if v.Equals(item) {
+			return append(s[:i], s[i+1:]...), true
+		}
+	}
+	return s, false
+}

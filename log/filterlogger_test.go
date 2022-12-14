@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"github.com/mmatczuk/go-http-tunnel/tunnelmock"
+	"github.com/hons82/go-http-tunnel/tunnelmock"
 )
 
 func TestFilterLogger_Log(t *testing.T) {

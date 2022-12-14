@@ -8,28 +8,12 @@ import (
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
-	"time"
 
 	"gopkg.in/yaml.v2"
 
-	"github.com/mmatczuk/go-http-tunnel/proto"
+	"github.com/hons82/go-http-tunnel/connection"
+	"github.com/hons82/go-http-tunnel/proto"
 )
-
-// Default backoff configuration.
-const (
-	DefaultBackoffInterval    = 500 * time.Millisecond
-	DefaultBackoffMultiplier  = 1.5
-	DefaultBackoffMaxInterval = 60 * time.Second
-	DefaultBackoffMaxTime     = 15 * time.Minute
-)
-
-// BackoffConfig defines behavior of staggering reconnection retries.
-type BackoffConfig struct {
-	Interval    time.Duration `yaml:"interval"`
-	Multiplier  float64       `yaml:"multiplier"`
-	MaxInterval time.Duration `yaml:"max_interval"`
-	MaxTime     time.Duration `yaml:"max_time"`
-}
 
 // Tunnel defines a tunnel.
 type Tunnel struct {
@@ -42,12 +26,13 @@ type Tunnel struct {
 
 // ClientConfig is a tunnel client configuration.
 type ClientConfig struct {
-	ServerAddr string             `yaml:"server_addr"`
-	TLSCrt     string             `yaml:"tls_crt"`
-	TLSKey     string             `yaml:"tls_key"`
-	RootCA     string             `yaml:"root_ca"`
-	Backoff    BackoffConfig      `yaml:"backoff"`
-	Tunnels    map[string]*Tunnel `yaml:"tunnels"`
+	ServerAddr string                     `yaml:"server_addr"`
+	TLSCrt     string                     `yaml:"tls_crt"`
+	TLSKey     string                     `yaml:"tls_key"`
+	RootCA     string                     `yaml:"root_ca"`
+	Tunnels    map[string]*Tunnel         `yaml:"tunnels"`
+	Backoff    connection.BackoffConfig   `yaml:"backoff"`
+	KeepAlive  connection.KeepAliveConfig `yaml:"keep_alive"`
 }
 
 func loadClientConfigFromFile(file string) (*ClientConfig, error) {
@@ -57,14 +42,10 @@ func loadClientConfigFromFile(file string) (*ClientConfig, error) {
 	}
 
 	c := ClientConfig{
-		TLSCrt: filepath.Join(filepath.Dir(file), "client.crt"),
-		TLSKey: filepath.Join(filepath.Dir(file), "client.key"),
-		Backoff: BackoffConfig{
-			Interval:    DefaultBackoffInterval,
-			Multiplier:  DefaultBackoffMultiplier,
-			MaxInterval: DefaultBackoffMaxInterval,
-			MaxTime:     DefaultBackoffMaxTime,
-		},
+		TLSCrt:    filepath.Join(filepath.Dir(file), "client.crt"),
+		TLSKey:    filepath.Join(filepath.Dir(file), "client.key"),
+		Backoff:   *connection.NewDefaultBackoffConfig(),
+		KeepAlive: *connection.NewDefaultKeepAliveConfig(),
 	}
 
 	if err = yaml.Unmarshal(buf, &c); err != nil {

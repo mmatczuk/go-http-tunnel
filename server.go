@@ -14,18 +14,22 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"golang.org/x/net/http2"
 
+	"github.com/hons82/go-http-tunnel/connection"
+	"github.com/hons82/go-http-tunnel/fileutil"
+	"github.com/hons82/go-http-tunnel/id"
+	"github.com/hons82/go-http-tunnel/log"
+	"github.com/hons82/go-http-tunnel/proto"
 	"github.com/inconshreveable/go-vhost"
-	"github.com/mmatczuk/go-http-tunnel/id"
-	"github.com/mmatczuk/go-http-tunnel/log"
-	"github.com/mmatczuk/go-http-tunnel/proto"
 )
 
-// A set of listeners to manage subscribers
+// SubscriptionListener A set of listeners to manage subscribers
 type SubscriptionListener interface {
 	// Invoked if AutoSubscribe is false and must return true if the client is allowed to subscribe or not.
 	// If the tlsConfig is configured to require client certificate validation, chain will contain the first
@@ -41,21 +45,22 @@ type SubscriptionListener interface {
 
 // ServerConfig defines configuration for the Server.
 type ServerConfig struct {
-	// Addr is TCP address to listen for client connections. If empty ":0"
-	// is used.
+	// Addr is TCP address to listen for client connections. If empty ":0" is used.
 	Addr string
-	// AutoSubscribe if enabled will automatically subscribe new clients on
-	// first call.
+	// AutoSubscribe if enabled will automatically subscribe new clients on first call.
 	AutoSubscribe bool
 	// TLSConfig specifies the tls configuration to use with tls.Listener.
 	TLSConfig *tls.Config
-	// Listener specifies optional listener for client connections. If nil
-	// tls.Listen("tcp", Addr, TLSConfig) is used.
+	// Listener specifies optional listener for client connections. If nil tls.Listen("tcp", Addr, TLSConfig) is used.
 	Listener net.Listener
 	// Logger is optional logger. If nil logging is disabled.
 	Logger log.Logger
 	// Addr is TCP address to listen for TLS SNI connections
 	SNIAddr string
+	// Used to configure the keepalive for the server -> client tcp connection
+	KeepAlive connection.KeepAliveConfig
+	// How long should a disconnected message been hold before sending it to the log
+	Debounce Debounced
 	// Optional listener to manage subscribers
 	SubscriptionListener SubscriptionListener
 }
@@ -64,13 +69,19 @@ type ServerConfig struct {
 // tunnel connection.
 type Server struct {
 	*registry
-	config *ServerConfig
-
+	config     *ServerConfig
 	listener   net.Listener
 	connPool   *connPool
 	httpClient *http.Client
 	logger     log.Logger
+	debounce   Debounced
 	vhostMuxer *vhost.TLSMuxer
+}
+
+// Debounced Hold IDs that are disconnected for a short time before executing the function.
+type Debounced struct {
+	Execute         func(f func())
+	disconnectedIDs []id.ID
 }
 
 // NewServer creates a new Server.
@@ -90,6 +101,7 @@ func NewServer(config *ServerConfig) (*Server, error) {
 		config:   config,
 		listener: listener,
 		logger:   logger,
+		debounce: config.Debounce,
 	}
 
 	t := &http2.Transport{}
@@ -169,16 +181,30 @@ func listener(config *ServerConfig) (net.Listener, error) {
 	return net.Listen("tcp", config.Addr)
 }
 
-// disconnected clears resources used by client, it's invoked by connection pool
-// when client goes away.
+// disconnected clears resources used by client, it's invoked by connection pool when client goes away.
 func (s *Server) disconnected(identifier id.ID) {
-	s.logger.Log(
-		"level", 1,
-		"action", "disconnected",
-		"identifier", identifier,
-	)
+	if s.debounce.Execute != nil {
+		s.debounce.disconnectedIDs = append(s.debounce.disconnectedIDs, identifier)
 
-	i := s.registry.clear(identifier)
+		s.debounce.Execute(func() {
+			for _, id := range s.debounce.disconnectedIDs {
+				s.logger.Log(
+					"level", 1,
+					"action", "disconnected",
+					"identifier", id,
+				)
+			}
+			s.debounce.disconnectedIDs = nil
+		})
+	} else {
+		s.logger.Log(
+			"level", 1,
+			"action", "disconnected",
+			"identifier", identifier,
+		)
+	}
+
+	i := s.registry.Unsubscribe(identifier, s.config.AutoSubscribe)
 	if i == nil {
 		return
 	}
@@ -225,7 +251,12 @@ func (s *Server) Start() {
 			continue
 		}
 
-		if err := keepAlive(conn); err != nil {
+		s.logger.Log(
+			"level", 2,
+			"msg", fmt.Sprintf("setting up keep alive using config: %v", s.config.KeepAlive.String()),
+		)
+
+		if err := s.config.KeepAlive.Set(conn); err != nil {
 			s.logger.Log(
 				"level", 0,
 				"msg", "TCP keepalive for control connection failed",
@@ -239,15 +270,16 @@ func (s *Server) Start() {
 }
 
 func (s *Server) handleClient(conn net.Conn) {
-	logger := log.NewContext(s.logger).With("addr", conn.RemoteAddr())
+	logger := log.NewContext(s.logger).With("remote addr", conn.RemoteAddr())
 
 	logger.Log(
-		"level", 1,
+		"level", 2,
 		"action", "try connect",
 	)
 
 	var (
 		identifier id.ID
+		IDInfo     id.IDInfo
 		req        *http.Request
 		resp       *http.Response
 		tunnels    map[string]*proto.Tunnel
@@ -256,6 +288,9 @@ func (s *Server) handleClient(conn net.Conn) {
 
 		inConnPool bool
 		certs      []*x509.Certificate
+
+		remainingIDs []id.ID
+		found        bool
 	)
 
 	tlsConn, ok := conn.(*tls.Conn)
@@ -268,7 +303,7 @@ func (s *Server) handleClient(conn net.Conn) {
 		goto reject
 	}
 
-	identifier, err = id.PeerID(tlsConn)
+	identifier, IDInfo, err = id.PeerID(tlsConn)
 	if err != nil {
 		logger.Log(
 			"level", 2,
@@ -348,7 +383,7 @@ func (s *Server) handleClient(conn net.Conn) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		err = fmt.Errorf("Status %s", resp.Status)
+		err = fmt.Errorf("status %s", resp.Status)
 		logger.Log(
 			"level", 2,
 			"msg", "handshake failed",
@@ -358,7 +393,7 @@ func (s *Server) handleClient(conn net.Conn) {
 	}
 
 	if resp.ContentLength == 0 {
-		err = fmt.Errorf("Tunnels Content-Legth: 0")
+		err = fmt.Errorf("tunnels content-length: 0")
 		logger.Log(
 			"level", 2,
 			"msg", "handshake failed",
@@ -377,28 +412,45 @@ func (s *Server) handleClient(conn net.Conn) {
 	}
 
 	if len(tunnels) == 0 {
-		err = fmt.Errorf("No tunnels")
+		logger.Log(
+			"level", 1,
+			"msg", "configuration error",
+			"err", fmt.Errorf("no tunnels"),
+		)
+		goto reject
+	}
+
+	if err = s.hasTunnels(tunnels, identifier); err != nil {
 		logger.Log(
 			"level", 2,
-			"msg", "handshake failed",
+			"msg", "tunnel check failed",
 			"err", err,
 		)
 		goto reject
 	}
 
-	if err = s.addTunnels(tunnels, identifier); err != nil {
+	if err = s.addTunnels(tunnels, identifier, IDInfo); err != nil {
 		logger.Log(
 			"level", 2,
-			"msg", "handshake failed",
+			"msg", "add tunnel failed",
 			"err", err,
 		)
 		goto reject
 	}
 
-	logger.Log(
-		"level", 1,
-		"action", "connected",
-	)
+	remainingIDs, found = id.Remove(s.debounce.disconnectedIDs, identifier)
+	if found {
+		s.debounce.disconnectedIDs = remainingIDs
+		logger.Log(
+			"level", 2,
+			"action", "reconnected",
+		)
+	} else {
+		logger.Log(
+			"level", 1,
+			"action", "connected",
+		)
+	}
 
 	return
 
@@ -414,6 +466,65 @@ reject:
 	}
 
 	conn.Close()
+}
+
+// loadAllowedTunnels registers allowed tunnels from a file
+func (s *Server) loadAllowedTunnels(propertiesFile string) {
+	clients, err := fileutil.ReadPropertiesFile(propertiesFile)
+	if err != nil {
+		s.logger.Log(
+			"level", 1,
+			"action", "failed to load clients",
+			"err", err,
+		)
+		return
+	}
+
+	for host, value := range clients {
+		if err := s.registerTunnel(host, value); err != nil {
+			s.logger.Log(
+				"level", 2,
+				"action", "failed to load tunnel",
+				"host", host,
+				"err", err,
+			)
+		}
+	}
+}
+
+// ReloadTunnels registers allowed tunnels from a file
+func (s *Server) ReloadTunnels(path string) {
+	directory, err := fileutil.IsDirectory(path)
+	if err != nil {
+		s.logger.Log(
+			"level", 3,
+			"action", "could not determine if path is a directory",
+			"err", err,
+		)
+	}
+	if directory {
+		files, err := os.ReadDir(path)
+		if err != nil {
+			s.logger.Log(
+				"level", 2,
+				"action", "could not read directory",
+				"err", err,
+			)
+		}
+		for _, file := range files {
+			if file.IsDir() {
+				s.logger.Log(
+					"level", 3,
+					"action", "skip directory",
+					"file", file.Name(),
+				)
+			} else {
+				s.loadAllowedTunnels(filepath.Join(path, file.Name()))
+			}
+		}
+	} else {
+		s.loadAllowedTunnels(path)
+	}
 }
 
 // notifyError tries to send error to client.
@@ -441,10 +552,25 @@ func (s *Server) notifyError(serverError error, identifier id.ID) {
 	s.httpClient.Do(req.WithContext(ctx))
 }
 
+func (s *Server) hasTunnels(tunnels map[string]*proto.Tunnel, identifier id.ID) error {
+	var err error
+	for name, t := range tunnels {
+		// Check the current tunnel
+		// AutoSubscribe --> Tunnel not yet registered (means that it isn't already opened)
+		// !AutoSubscribe -> Tunnel has to be already registered, and therefore allowed to be opened
+		if s.config.AutoSubscribe == s.HasTunnel(t.Host, identifier) {
+			err = fmt.Errorf("tunnel %s (%s) not allowed for %s", name, t.Host, identifier)
+			break
+		}
+	}
+	return err
+}
+
 // addTunnels invokes addHost or addListener based on data from proto.Tunnel. If
 // a tunnel cannot be added whole batch is reverted.
-func (s *Server) addTunnels(tunnels map[string]*proto.Tunnel, identifier id.ID) error {
+func (s *Server) addTunnels(tunnels map[string]*proto.Tunnel, identifier id.ID, IDInfo id.IDInfo) error {
 	i := &RegistryItem{
+		IDInfo:    &IDInfo,
 		Hosts:     []*HostAuth{},
 		Listeners: []net.Listener{},
 	}
@@ -520,7 +646,7 @@ func (s *Server) Unsubscribe(identifier id.ID) *RegistryItem {
 		s.config.SubscriptionListener.Unsubscribed(identifier)
 	}
 	s.connPool.DeleteConn(identifier)
-	return s.registry.Unsubscribe(identifier)
+	return s.registry.Unsubscribe(identifier, s.config.AutoSubscribe)
 }
 
 // Ping measures the RTT response time.
@@ -561,13 +687,19 @@ func (s *Server) listen(l net.Listener, identifier id.ID) {
 		}
 
 		tlsConn, ok := conn.(*vhost.TLSConn)
+
+		s.logger.Log(
+			"level", 1,
+			"msg", fmt.Sprintf("setting up keep alive using config: %v", s.config.KeepAlive.String()),
+		)
+
 		if ok {
 			msg.ForwardedHost = tlsConn.Host()
-			err = keepAlive(tlsConn.Conn)
+			err = s.config.KeepAlive.Set(tlsConn.Conn)
 
 		} else {
 			msg.ForwardedHost = l.Addr().String()
-			err = keepAlive(conn)
+			err = s.config.KeepAlive.Set(conn)
 		}
 
 		if err != nil {
@@ -594,6 +726,7 @@ func (s *Server) listen(l net.Listener, identifier id.ID) {
 	}
 }
 
+// Upgrade the connection
 func (s *Server) Upgrade(identifier id.ID, conn net.Conn, requestBytes []byte) error {
 
 	var err error
@@ -606,11 +739,11 @@ func (s *Server) Upgrade(identifier id.ID, conn net.Conn, requestBytes []byte) e
 	tlsConn, ok := conn.(*tls.Conn)
 	if ok {
 		msg.ForwardedHost = tlsConn.ConnectionState().ServerName
-		err = keepAlive(tlsConn.NetConn())
+		err = s.config.KeepAlive.Set(tlsConn.NetConn())
 
 	} else {
 		msg.ForwardedHost = conn.RemoteAddr().String()
-		err = keepAlive(conn)
+		err = s.config.KeepAlive.Set(conn)
 	}
 
 	if err != nil {
@@ -640,23 +773,44 @@ func (s *Server) Upgrade(identifier id.ID, conn net.Conn, requestBytes []byte) e
 
 // ServeHTTP proxies http connection to the client.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	resp, err := s.RoundTrip(r)
-	if err == errUnauthorised {
-		w.Header().Set("WWW-Authenticate", "Basic realm=\"User Visible Realm\"")
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+	if strings.EqualFold(r.Method, "TRACE") {
+		s.logger.Log(
+			"level", 2,
+			"action", "method not allowed",
+			"method", r.Method,
+			"addr", r.RemoteAddr,
+			"host", r.Host,
+			"url", r.URL,
+		)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+	resp, err := s.RoundTrip(r)
 	if err != nil {
+		level := 0
+		code := http.StatusBadGateway
+		if err == errUnauthorised {
+			w.Header().Set("WWW-Authenticate", "Basic realm=\"User Visible Realm\"")
+			level = 1
+			code = http.StatusUnauthorized
+		} else if err == errClientNotSubscribed {
+			level = 2
+			code = http.StatusNotFound
+		}
 		s.logger.Log(
-			"level", 0,
+			"level", level,
 			"action", "round trip failed",
 			"addr", r.RemoteAddr,
 			"host", r.Host,
 			"url", r.URL,
-			"err", err,
+			"code", code,
 		)
-
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.WriteHeader(code)
+		fmt.Fprintln(w, err.Error())
 		return
 	}
 	defer resp.Body.Close()
@@ -936,4 +1090,48 @@ func (s *Server) Stop() {
 	if s.listener != nil {
 		s.listener.Close()
 	}
+}
+
+// ListenerInfo info about the listener
+type ListenerInfo struct {
+	Network string
+	Addr    string
+}
+
+// ClientInfo info about the client
+type ClientInfo struct {
+	ID        string
+	IDInfo    id.IDInfo
+	Listeners []*ListenerInfo
+	Hosts     []string
+}
+
+// GetClientInfo prepare and get client info
+func (s *Server) GetClientInfo() []*ClientInfo {
+	s.registry.mu.Lock()
+	defer s.registry.mu.Unlock()
+	ret := []*ClientInfo{}
+	for k, v := range s.registry.items {
+		c := &ClientInfo{
+			ID: k.String(),
+		}
+		ret = append(ret, c)
+		if v == voidRegistryItem {
+			s.logger.Log(
+				"level", 3,
+				"identifier", k.String(),
+				"msg", "void registry item",
+			)
+		} else {
+			c.IDInfo = *v.IDInfo
+			for _, l := range v.Hosts {
+				c.Hosts = append(c.Hosts, l.Host)
+			}
+			for _, l := range v.Listeners {
+				p := &ListenerInfo{Network: l.Addr().Network(), Addr: l.Addr().String()}
+				c.Listeners = append(c.Listeners, p)
+			}
+		}
+	}
+	return ret
 }

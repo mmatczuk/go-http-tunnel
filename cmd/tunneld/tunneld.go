@@ -9,15 +9,18 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
-	"strings"
+	"time"
 
 	"golang.org/x/net/http2"
 
-	"github.com/mmatczuk/go-http-tunnel"
-	"github.com/mmatczuk/go-http-tunnel/id"
-	"github.com/mmatczuk/go-http-tunnel/log"
+	"github.com/bep/debounce"
+	"github.com/fsnotify/fsnotify"
+	tunnel "github.com/hons82/go-http-tunnel"
+	"github.com/hons82/go-http-tunnel/connection"
+	"github.com/hons82/go-http-tunnel/log"
 )
 
 func main() {
@@ -39,6 +42,19 @@ func main() {
 
 	autoSubscribe := opts.clients == ""
 
+	keepAlive, err := connection.Parse(opts.keepAlive)
+	if err != nil {
+		fatal("failed to parse KeepaliveConfig: %s", err)
+	}
+
+	debounceLog, err := time.ParseDuration(opts.debounceLog)
+	if err != nil {
+		fatal("failed to parse keepalive interval [%s], [%v]", opts.debounceLog, err)
+	}
+	debounced := &tunnel.Debounced{
+		Execute: debounce.New(debounceLog),
+	}
+
 	// setup server
 	server, err := tunnel.NewServer(&tunnel.ServerConfig{
 		Addr:          opts.tunnelAddr,
@@ -46,35 +62,126 @@ func main() {
 		AutoSubscribe: autoSubscribe,
 		TLSConfig:     tlsconf,
 		Logger:        logger,
+		KeepAlive:     *keepAlive,
+		Debounce:      *debounced,
 	})
 	if err != nil {
 		fatal("failed to create server: %s", err)
 	}
 
 	if !autoSubscribe {
-		for _, c := range strings.Split(opts.clients, ",") {
-			if c == "" {
-				fatal("empty client id")
-			}
-			identifier := id.ID{}
-			err := identifier.UnmarshalText([]byte(c))
+		// First load immediatly
+		server.ReloadTunnels(opts.clients)
+
+		// Watch for the file to change
+		watcher, err := fsnotify.NewWatcher()
+		if err != nil {
+			logger.Log(
+				"level", 1,
+				"action", "could not create file watcher",
+				"err", err,
+			)
+		} else {
+			defer watcher.Close()
+
+			go func() {
+				for {
+					select {
+					case event, ok := <-watcher.Events:
+						if !ok {
+							return
+						}
+						logger.Log(
+							"level", 3,
+							"action", "watched file changed",
+							"file", event.Name,
+							"action", event.Op.String(),
+						)
+						if event.Op&fsnotify.Write == fsnotify.Write ||
+							event.Op&fsnotify.Create == fsnotify.Create ||
+							event.Op&fsnotify.Remove == fsnotify.Remove {
+							server.Clear()
+							server.ReloadTunnels(opts.clients)
+						}
+					case err, ok := <-watcher.Errors:
+						if !ok {
+							return
+						}
+						logger.Log(
+							"level", 2,
+							"action", "error watching file",
+							"err", err,
+						)
+					}
+				}
+			}()
+
+			err = watcher.Add(opts.clients)
 			if err != nil {
-				fatal("invalid identifier %q: %s", c, err)
+				logger.Log(
+					"level", 1,
+					"action", "add watch failed",
+					"file", opts.clients,
+					"err", err,
+				)
 			}
-			server.Subscribe(identifier)
 		}
+	}
+
+	// start API
+	if opts.apiAddr != "" {
+		go func() {
+			logger.Log(
+				"level", 1,
+				"action", "start api",
+				"addr", opts.apiAddr,
+			)
+			go initAPIServer(&ApiConfig{
+				Addr:   opts.apiAddr,
+				Server: server,
+				Logger: logger,
+			})
+		}()
 	}
 
 	// start HTTP
 	if opts.httpAddr != "" {
 		go func() {
-			logger.Log(
-				"level", 1,
-				"action", "start http",
-				"addr", opts.httpAddr,
-			)
+			s := &http.Server{
+				Addr: opts.httpAddr,
+			}
+			if opts.httpsAddr != "" {
+				logger.Log(
+					"level", 1,
+					"action", "start http redirect",
+					"addr", opts.httpAddr,
+				)
 
-			fatal("failed to start HTTP: %s", http.ListenAndServe(opts.httpAddr, server))
+				_, tlsPort, err := net.SplitHostPort(opts.httpsAddr)
+				if err != nil {
+					fatal("failed to get https port: %s", err)
+				}
+				s.Handler = http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						host, _, err := net.SplitHostPort(r.Host)
+						if err != nil {
+							host = r.Host
+						}
+						u := r.URL
+						u.Host = net.JoinHostPort(host, tlsPort)
+						u.Scheme = "https"
+						http.Redirect(w, r, u.String(), http.StatusMovedPermanently)
+					},
+				)
+			} else {
+				logger.Log(
+					"level", 1,
+					"action", "start http",
+					"addr", opts.httpAddr,
+				)
+				s.Handler = server
+			}
+			fatal("failed to start HTTP: %s", s.ListenAndServe())
 		}()
 	}
 
@@ -90,6 +197,9 @@ func main() {
 			s := &http.Server{
 				Addr:    opts.httpsAddr,
 				Handler: server,
+				TLSConfig: &tls.Config{
+					MinVersion: tls.VersionTLS12,
+				},
 			}
 			http2.ConfigureServer(s, nil)
 
@@ -128,11 +238,7 @@ func tlsConfig(opts *options) (*tls.Config, error) {
 		ClientCAs:              roots,
 		SessionTicketsDisabled: true,
 		MinVersion:             tls.VersionTLS12,
-		CipherSuites: []uint16{
-			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256},
-		PreferServerCipherSuites: true,
-		NextProtos:               []string{"h2"},
+		NextProtos:             []string{"h2"},
 	}, nil
 }
 

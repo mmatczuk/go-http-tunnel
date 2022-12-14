@@ -9,13 +9,14 @@ import (
 	"net"
 	"sync"
 
-	"github.com/mmatczuk/go-http-tunnel/id"
-	"github.com/mmatczuk/go-http-tunnel/log"
+	"github.com/hons82/go-http-tunnel/id"
+	"github.com/hons82/go-http-tunnel/log"
 )
 
 // RegistryItem holds information about hosts and listeners associated with a
 // client.
 type RegistryItem struct {
+	*id.IDInfo
 	Hosts     []*HostAuth
 	Listeners []net.Listener
 }
@@ -27,6 +28,7 @@ type HostAuth struct {
 }
 
 type hostInfo struct {
+	*id.IDInfo
 	identifier id.ID
 	auth       *Auth
 }
@@ -62,7 +64,7 @@ func (r *registry) Subscribe(identifier id.ID) {
 	}
 
 	r.logger.Log(
-		"level", 1,
+		"level", 2,
 		"action", "subscribe",
 		"identifier", identifier,
 	)
@@ -91,29 +93,41 @@ func (r *registry) Subscriber(hostPort string) (id.ID, *Auth, bool) {
 	return h.identifier, h.auth, ok
 }
 
+func (r *registry) HasTunnel(hostPort string, identifier id.ID) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	h, ok := r.hosts[trimPort(hostPort)]
+
+	return ok && h.identifier.Equals(identifier)
+}
+
 // Unsubscribe removes client from registry and returns it's RegistryItem.
-func (r *registry) Unsubscribe(identifier id.ID) *RegistryItem {
+func (r *registry) Unsubscribe(identifier id.ID, autoSubscribe bool) *RegistryItem {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	i, ok := r.items[identifier]
-	if !ok {
+	if !ok || (autoSubscribe && i == voidRegistryItem) {
 		return nil
 	}
 
 	r.logger.Log(
-		"level", 1,
+		"level", 2,
 		"action", "unsubscribe",
 		"identifier", identifier,
 	)
 
-	if i.Hosts != nil {
-		for _, h := range i.Hosts {
-			delete(r.hosts, h.Host)
+	if autoSubscribe {
+		if i.Hosts != nil {
+			for _, h := range i.Hosts {
+				delete(r.hosts, h.Host)
+			}
 		}
+		delete(r.items, identifier)
+	} else {
+		r.items[identifier] = voidRegistryItem
 	}
-
-	delete(r.items, identifier)
 
 	return i
 }
@@ -141,7 +155,7 @@ func (r *registry) set(i *RegistryItem, identifier id.ID) error {
 			if h.Auth != nil && h.Auth.User == "" {
 				return fmt.Errorf("missing auth user")
 			}
-			if _, ok := r.hosts[trimPort(h.Host)]; ok {
+			if hi, ok := r.hosts[trimPort(h.Host)]; ok && !hi.identifier.Equals(identifier) {
 				return fmt.Errorf("host %q is occupied", h.Host)
 			}
 		}
@@ -159,30 +173,53 @@ func (r *registry) set(i *RegistryItem, identifier id.ID) error {
 	return nil
 }
 
-func (r *registry) clear(identifier id.ID) *RegistryItem {
+func (r *registry) registerTunnel(host string, client string) error {
+	identifier := id.New([]byte(client))
+
 	r.logger.Log(
-		"level", 2,
-		"action", "clear registry item",
+		"level", 3,
+		"action", "register tunnel",
+		"host", host,
+		"client", client,
 		"identifier", identifier,
+	)
+
+	r.Subscribe(identifier)
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.hosts[trimPort(host)]; ok {
+		return fmt.Errorf("host %q is occupied", host)
+	}
+
+	r.hosts[trimPort(host)] = &hostInfo{
+		identifier: identifier,
+		IDInfo: &id.IDInfo{
+			Client: client,
+		},
+	}
+
+	return nil
+}
+
+// Clear removes all items from the registry
+func (r *registry) Clear() {
+	r.logger.Log(
+		"level", 3,
+		"action", "clear registry ",
 	)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	i, ok := r.items[identifier]
-	if !ok || i == voidRegistryItem {
-		return nil
+	for k := range r.hosts {
+		delete(r.hosts, k)
 	}
 
-	if i.Hosts != nil {
-		for _, h := range i.Hosts {
-			delete(r.hosts, trimPort(h.Host))
-		}
+	for i := range r.items {
+		delete(r.items, i)
 	}
-
-	r.items[identifier] = voidRegistryItem
-
-	return i
 }
 
 func trimPort(hostPort string) (host string) {
