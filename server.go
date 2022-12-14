@@ -14,6 +14,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -410,11 +412,10 @@ func (s *Server) handleClient(conn net.Conn) {
 	}
 
 	if len(tunnels) == 0 {
-		err = fmt.Errorf("no tunnels")
 		logger.Log(
-			"level", 2,
-			"msg", "handshake failed",
-			"err", err,
+			"level", 1,
+			"msg", "configuration error",
+			"err", fmt.Errorf("no tunnels"),
 		)
 		goto reject
 	}
@@ -431,7 +432,7 @@ func (s *Server) handleClient(conn net.Conn) {
 	if err = s.addTunnels(tunnels, identifier, IDInfo); err != nil {
 		logger.Log(
 			"level", 2,
-			"msg", "handshake failed",
+			"msg", "add tunnel failed",
 			"err", err,
 		)
 		goto reject
@@ -467,8 +468,8 @@ reject:
 	conn.Close()
 }
 
-// LoadAllowedTunnels registers allowed tunnels from a file
-func (s *Server) LoadAllowedTunnels(propertiesFile string) {
+// loadAllowedTunnels registers allowed tunnels from a file
+func (s *Server) loadAllowedTunnels(propertiesFile string) {
 	clients, err := fileutil.ReadPropertiesFile(propertiesFile)
 	if err != nil {
 		s.logger.Log(
@@ -480,7 +481,7 @@ func (s *Server) LoadAllowedTunnels(propertiesFile string) {
 	}
 
 	for host, value := range clients {
-		if err := s.RegisterTunnel(host, value); err != nil {
+		if err := s.registerTunnel(host, value); err != nil {
 			s.logger.Log(
 				"level", 2,
 				"action", "failed to load tunnel",
@@ -488,6 +489,41 @@ func (s *Server) LoadAllowedTunnels(propertiesFile string) {
 				"err", err,
 			)
 		}
+	}
+}
+
+// ReloadTunnels registers allowed tunnels from a file
+func (s *Server) ReloadTunnels(path string) {
+	directory, err := fileutil.IsDirectory(path)
+	if err != nil {
+		s.logger.Log(
+			"level", 3,
+			"action", "could not determine if path is a directory",
+			"err", err,
+		)
+	}
+	if directory {
+		files, err := os.ReadDir(path)
+		if err != nil {
+			s.logger.Log(
+				"level", 2,
+				"action", "could not read directory",
+				"err", err,
+			)
+		}
+		for _, file := range files {
+			if file.IsDir() {
+				s.logger.Log(
+					"level", 3,
+					"action", "skip directory",
+					"file", file.Name(),
+				)
+			} else {
+				s.loadAllowedTunnels(filepath.Join(path, file.Name()))
+			}
+		}
+	} else {
+		s.loadAllowedTunnels(path)
 	}
 }
 
@@ -523,7 +559,7 @@ func (s *Server) hasTunnels(tunnels map[string]*proto.Tunnel, identifier id.ID) 
 		// AutoSubscribe --> Tunnel not yet registered (means that it isn't already opened)
 		// !AutoSubscribe -> Tunnel has to be already registered, and therefore allowed to be opened
 		if s.config.AutoSubscribe == s.HasTunnel(t.Host, identifier) {
-			err = fmt.Errorf("tunnel %s not allowed for %s", name, identifier)
+			err = fmt.Errorf("tunnel %s (%s) not allowed for %s", name, t.Host, identifier)
 			break
 		}
 	}

@@ -71,12 +71,11 @@ func main() {
 
 	if !autoSubscribe {
 		// First load immediatly
-		server.LoadAllowedTunnels(opts.clients)
+		server.ReloadTunnels(opts.clients)
 
 		// Watch for the file to change
 		watcher, err := fsnotify.NewWatcher()
 		if err != nil {
-			fatal("NewWatcher failed: %s", err)
 			logger.Log(
 				"level", 1,
 				"action", "could not create file watcher",
@@ -98,9 +97,11 @@ func main() {
 							"file", event.Name,
 							"action", event.Op.String(),
 						)
-						if event.Op&fsnotify.Write == fsnotify.Write {
+						if event.Op&fsnotify.Write == fsnotify.Write ||
+							event.Op&fsnotify.Create == fsnotify.Create ||
+							event.Op&fsnotify.Remove == fsnotify.Remove {
 							server.Clear()
-							server.LoadAllowedTunnels(event.Name)
+							server.ReloadTunnels(opts.clients)
 						}
 					case err, ok := <-watcher.Errors:
 						if !ok {

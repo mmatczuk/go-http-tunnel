@@ -118,13 +118,12 @@ func (r *registry) Unsubscribe(identifier id.ID, autoSubscribe bool) *RegistryIt
 		"identifier", identifier,
 	)
 
-	if i.Hosts != nil {
-		for _, h := range i.Hosts {
-			delete(r.hosts, h.Host)
-		}
-	}
-
 	if autoSubscribe {
+		if i.Hosts != nil {
+			for _, h := range i.Hosts {
+				delete(r.hosts, h.Host)
+			}
+		}
 		delete(r.items, identifier)
 	} else {
 		r.items[identifier] = voidRegistryItem
@@ -174,7 +173,7 @@ func (r *registry) set(i *RegistryItem, identifier id.ID) error {
 	return nil
 }
 
-func (r *registry) RegisterTunnel(host string, client string) error {
+func (r *registry) registerTunnel(host string, client string) error {
 	identifier := id.New([]byte(client))
 
 	r.logger.Log(

@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	"golang.org/x/net/http2"
 
 	"github.com/hons82/go-http-tunnel/connection"
@@ -98,7 +99,7 @@ func (c *Client) Start() error {
 		"level", 1,
 		"action", "start",
 	)
-
+	b := backoff.NewExponentialBackOff()
 	for {
 		conn, err := c.connect()
 		if err != nil {
@@ -115,17 +116,36 @@ func (c *Client) Start() error {
 		)
 
 		c.connMu.Lock()
-		now := time.Now()
 		err = c.serverErr
 
 		// detect disconnect hiccup
-		if err == nil && now.Sub(c.lastDisconnect).Seconds() < 5 {
+		if err == nil && time.Since(c.lastDisconnect).Seconds() < 5 {
 			err = fmt.Errorf("connection is being cut")
+		}
+
+		// Backoff
+		if b != nil {
+			if err != nil {
+				d := b.NextBackOff()
+				if d > 0 {
+					// backoff
+					c.logger.Log(
+						"level", 1,
+						"action", "backoff",
+						"sleep", d,
+						"err", err,
+					)
+					time.Sleep(d)
+					err = nil
+				}
+			} else {
+				b.Reset()
+			}
 		}
 
 		c.conn = nil
 		c.serverErr = nil
-		c.lastDisconnect = now
+		c.lastDisconnect = time.Now()
 		c.connMu.Unlock()
 
 		if err != nil {
