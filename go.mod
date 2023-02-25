@@ -8,7 +8,7 @@ require (
 	github.com/felixge/tcpkeepalive v0.0.0-20160804073959-5bb0b2dea91e
 	github.com/golang/mock v1.2.0
 	github.com/inconshreveable/go-vhost v0.0.0-20160627193104-06d84117953b
-	golang.org/x/net v0.0.0-20171123081856-c7086645de24
-	golang.org/x/text v0.1.1-0.20171102192421-88f656faf3f3 // indirect
+	golang.org/x/net v0.0.0-20220722155237-a158d28d115b
+	golang.org/x/text v0.3.8 // indirect
 	gopkg.in/yaml.v2 v2.2.2
 )
