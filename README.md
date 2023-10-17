@@ -196,4 +196,4 @@ A GitHub star is always appreciated!
 
 Copyright (C) 2017 Michał Matczuk
 
-This project is distributed under the AGPL-3 license. See the [LICENSE](https://github.com/mmatczuk/go-http-tunnel/blob/master/LICENSE) file for details. If you need an enterprice license contact me directly.
+This project is distributed under the AGPL-3 license. See the [LICENSE](https://github.com/mmatczuk/go-http-tunnel/blob/master/LICENSE) file for details. If you need an enterprise license contact me directly.
