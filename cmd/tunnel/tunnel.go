@@ -130,11 +130,15 @@ func tlsConfig(config *ClientConfig) (*tls.Config, error) {
 		}
 	}
 
-	host, _, err := net.SplitHostPort(config.ServerAddr)
-	if err != nil {
-		return nil, err
+	var host string
+	if config.ServerHostname != "" {
+		host = config.ServerHostname
+	} else {
+		host, _, err = net.SplitHostPort(config.ServerAddr)
+		if err != nil {
+			return nil, err
+		}
 	}
-
 	return &tls.Config{
 		ServerName:         host,
 		Certificates:       []tls.Certificate{cert},
