@@ -1,4 +1,5 @@
 language: go
+
 go:
   - 1.x
 
@@ -11,5 +12,33 @@ install:
   - make get-tools
   - make get-deps
 
-script:
-  - make
+stages:
+  - name: test
+  - name: build
+  - name: publish
+    if: tag IS present
+  # FIXME: now upload release from local
+  # - name: release
+  #   if: branch = master
+  #   if: tag IS present
+
+jobs:
+  fast_finish: true
+  include:
+    - stage: test
+      name: "Check Tests"
+      script: make
+    - stage: build
+      name: "Build Tests"
+      script: make build && make package
+    - stage: publish
+      name: "Publish Pre-Release"
+      script: make build && make package && make publish
+    # - stage: release
+    #   name: "Publish Release"
+    #   script: make build && make package && make release
+
+notifications:
+  email:
+    on_success: never
+    on_failure: always
