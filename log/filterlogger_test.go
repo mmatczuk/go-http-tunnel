@@ -29,3 +29,16 @@ func TestFilterLogger_Log(t *testing.T) {
 	f.Log("level", 3)
 	f.Log("level", 4)
 }
+
+func TestFilterLogger_Level(t *testing.T) {
+	for i, j := range map[int]int{
+		LevelError: 0,
+		LevelInfo:  1,
+		LevelDebug: 2,
+		LevelTrace: 3,
+	} {
+		if i != j {
+			t.Fatalf("Log levels not as expected %d != %d", i, j)
+		}
+	}
+}
