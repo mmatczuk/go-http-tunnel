@@ -1,6 +1,6 @@
 module github.com/mmatczuk/go-http-tunnel
 
-go 1.13
+go 1.25.0
 
 require (
 	github.com/calmh/luhn v2.0.0+incompatible
@@ -8,6 +8,8 @@ require (
 	github.com/felixge/tcpkeepalive v0.0.0-20160804073959-5bb0b2dea91e
 	github.com/golang/mock v1.2.0
 	github.com/inconshreveable/go-vhost v0.0.0-20160627193104-06d84117953b
-	golang.org/x/net v0.23.0
+	golang.org/x/net v0.55.0
 	gopkg.in/yaml.v2 v2.2.2
 )
+
+require golang.org/x/text v0.37.0 // indirect
