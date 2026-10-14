@@ -13,6 +13,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"path"
+	"strings"
 
 	"github.com/mmatczuk/go-http-tunnel/log"
 	"github.com/mmatczuk/go-http-tunnel/proto"
@@ -29,7 +30,12 @@ type HTTPProxy struct {
 	// * host and port
 	// * port
 	// * host
+	// * wildcard domain (*.example.com)
+	// * catch-all (*)
 	localURLMap map[string]*url.URL
+	// ForwardProxy enables forward proxying directly to the internet when no
+	// local URL is specified.
+	ForwardProxy bool
 	// logger is the proxy logger.
 	logger log.Logger
 }
@@ -101,7 +107,15 @@ func (p *HTTPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessag
 	}
 
 	setXForwardedFor(req.Header, msg.RemoteAddr)
-	req.URL.Host = msg.ForwardedHost
+	if req.URL.Host == "" {
+		req.URL.Host = msg.ForwardedHost
+	}
+	if req.URL.Scheme == "" {
+		req.URL.Scheme = msg.ForwardedProto
+	}
+	if req.Host == "" {
+		req.Host = msg.ForwardedHost
+	}
 
 	p.ServeHTTP(rw, req)
 }
@@ -114,6 +128,28 @@ func (p *HTTPProxy) Director(req *http.Request) {
 
 	target := p.localURLFor(req.URL)
 	if target == nil {
+		if p.ForwardProxy || p.hasWildcard() {
+			if req.URL.Scheme == "" {
+				req.URL.Scheme = "http"
+			}
+			if req.URL.Host == "" {
+				req.URL.Host = req.Host
+			}
+			if req.Host == "" {
+				req.Host = req.URL.Host
+			}
+			if _, ok := req.Header["User-Agent"]; !ok {
+				req.Header.Set("User-Agent", "")
+			}
+			p.logger.Log(
+				"level", 2,
+				"action", "url forward",
+				"from", &orig,
+				"to", req.URL,
+			)
+			return
+		}
+
 		p.logger.Log(
 			"level", 1,
 			"msg", "no target",
@@ -151,6 +187,18 @@ func (p *HTTPProxy) Director(req *http.Request) {
 	)
 }
 
+func (p *HTTPProxy) hasWildcard() bool {
+	if _, ok := p.localURLMap["*"]; ok {
+		return true
+	}
+	for k := range p.localURLMap {
+		if strings.HasPrefix(k, "*.") {
+			return true
+		}
+	}
+	return false
+}
+
 func singleJoiningSlash(a, b string) string {
 	if a == "" || a == "/" {
 		return b
@@ -175,12 +223,37 @@ func (p *HTTPProxy) localURLFor(u *url.URL) *url.URL {
 
 	// try port
 	host, port, _ := net.SplitHostPort(hostPort)
-	if addr := p.localURLMap[port]; addr != nil {
-		return addr
+	if host == "" {
+		host = hostPort
+	}
+	if port != "" {
+		if addr := p.localURLMap[port]; addr != nil {
+			return addr
+		}
 	}
 
 	// try host
 	if addr := p.localURLMap[host]; addr != nil {
+		return addr
+	}
+
+	// try wildcard domain match (e.g. *.example.com)
+	if dot := strings.Index(host, "."); dot != -1 {
+		for dot != -1 {
+			wildcard := "*" + host[dot:]
+			if addr := p.localURLMap[wildcard]; addr != nil {
+				return addr
+			}
+			nextDot := strings.Index(host[dot+1:], ".")
+			if nextDot == -1 {
+				break
+			}
+			dot += 1 + nextDot
+		}
+	}
+
+	// try catch-all "*"
+	if addr := p.localURLMap["*"]; addr != nil {
 		return addr
 	}
 

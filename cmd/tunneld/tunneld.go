@@ -28,7 +28,7 @@ func main() {
 		return
 	}
 
-	fmt.Println(banner)
+	fmt.Print(banner)
 
 	logger := log.NewFilterLogger(log.NewStdLogger(), opts.logLevel)
 

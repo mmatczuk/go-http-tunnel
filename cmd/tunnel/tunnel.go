@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v2"
 
@@ -157,9 +158,17 @@ func tunnels(m map[string]*Tunnel) map[string]*proto.Tunnel {
 	p := make(map[string]*proto.Tunnel)
 
 	for name, t := range m {
+		protocol := t.Protocol
+		host := t.Host
+		if protocol == "proxy" {
+			protocol = proto.HTTP
+			if host == "" {
+				host = "*"
+			}
+		}
 		p[name] = &proto.Tunnel{
-			Protocol: t.Protocol,
-			Host:     t.Host,
+			Protocol: protocol,
+			Host:     host,
 			Auth:     t.Auth,
 			Addr:     t.RemoteAddr,
 		}
@@ -171,15 +180,26 @@ func tunnels(m map[string]*Tunnel) map[string]*proto.Tunnel {
 func proxy(m map[string]*Tunnel, logger log.Logger) tunnel.ProxyFunc {
 	httpURL := make(map[string]*url.URL)
 	tcpAddr := make(map[string]string)
+	forwardProxy := false
 
 	for _, t := range m {
-		switch t.Protocol {
-		case proto.HTTP:
-			u, err := url.Parse(t.Addr)
-			if err != nil {
-				fatal("invalid tunnel address: %s", err)
+		protocol := t.Protocol
+		if protocol == "proxy" || (protocol == proto.HTTP && (t.Host == "*" || strings.HasPrefix(t.Host, "*."))) {
+			forwardProxy = true
+		}
+		switch protocol {
+		case proto.HTTP, "proxy":
+			if t.Addr != "" {
+				u, err := url.Parse(t.Addr)
+				if err != nil {
+					fatal("invalid tunnel address: %s", err)
+				}
+				host := t.Host
+				if host == "" {
+					host = "*"
+				}
+				httpURL[host] = u
 			}
-			httpURL[t.Host] = u
 		case proto.TCP, proto.TCP4, proto.TCP6:
 			tcpAddr[t.RemoteAddr] = t.Addr
 		case proto.SNI:
@@ -187,9 +207,15 @@ func proxy(m map[string]*Tunnel, logger log.Logger) tunnel.ProxyFunc {
 		}
 	}
 
+	httpProxy := tunnel.NewMultiHTTPProxy(httpURL, log.NewContext(logger).WithPrefix("proxy", "HTTP"))
+	httpProxy.ForwardProxy = forwardProxy
+
+	tcpProxy := tunnel.NewMultiTCPProxy(tcpAddr, log.NewContext(logger).WithPrefix("proxy", "TCP"))
+	tcpProxy.ForwardProxy = forwardProxy
+
 	return tunnel.Proxy(tunnel.ProxyFuncs{
-		HTTP: tunnel.NewMultiHTTPProxy(httpURL, log.NewContext(logger).WithPrefix("proxy", "HTTP")).Proxy,
-		TCP:  tunnel.NewMultiTCPProxy(tcpAddr, log.NewContext(logger).WithPrefix("proxy", "TCP")).Proxy,
+		HTTP: httpProxy.Proxy,
+		TCP:  tcpProxy.Proxy,
 	})
 }
 

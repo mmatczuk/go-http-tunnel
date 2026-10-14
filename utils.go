@@ -5,6 +5,7 @@
 package tunnel
 
 import (
+	"encoding/base64"
 	"io"
 	"net"
 	"net/http"
@@ -12,6 +13,23 @@ import (
 
 	"github.com/mmatczuk/go-http-tunnel/log"
 )
+
+func parseBasicAuth(auth string) (username, password string, ok bool) {
+	const prefix = "Basic "
+	if len(auth) < len(prefix) || !strings.EqualFold(auth[:len(prefix)], prefix) {
+		return "", "", false
+	}
+	c, err := base64.StdEncoding.DecodeString(auth[len(prefix):])
+	if err != nil {
+		return "", "", false
+	}
+	cs := string(c)
+	s := strings.IndexByte(cs, ':')
+	if s < 0 {
+		return "", "", false
+	}
+	return cs[:s], cs[s+1:], true
+}
 
 func transfer(dst io.Writer, src io.Reader, logger log.Logger) {
 	n, err := io.Copy(dst, src)
