@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 
 	"github.com/mmatczuk/go-http-tunnel/log"
 	"github.com/mmatczuk/go-http-tunnel/proto"
@@ -23,7 +24,12 @@ type TCPProxy struct {
 	// * host and port
 	// * port
 	// * host
+	// * wildcard domain (*.example.com)
+	// * catch-all (*)
 	localAddrMap map[string]string
+	// ForwardProxy enables forward proxying directly to the destination when no
+	// local address is mapped.
+	ForwardProxy bool
 	// logger is the proxy logger.
 	logger log.Logger
 }
@@ -70,12 +76,16 @@ func (p *TCPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage
 
 	target := p.localAddrFor(msg.ForwardedHost)
 	if target == "" {
-		p.logger.Log(
-			"level", 1,
-			"msg", "no target",
-			"ctrlMsg", msg,
-		)
-		return
+		if p.ForwardProxy || p.hasWildcard() {
+			target = msg.ForwardedHost
+		} else {
+			p.logger.Log(
+				"level", 1,
+				"msg", "no target",
+				"ctrlMsg", msg,
+			)
+			return
+		}
 	}
 
 	local, err := net.DialTimeout("tcp", target, DefaultTimeout)
@@ -118,6 +128,18 @@ func (p *TCPProxy) Proxy(w io.Writer, r io.ReadCloser, msg *proto.ControlMessage
 	<-done
 }
 
+func (p *TCPProxy) hasWildcard() bool {
+	if _, ok := p.localAddrMap["*"]; ok {
+		return true
+	}
+	for k := range p.localAddrMap {
+		if strings.HasPrefix(k, "*.") {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *TCPProxy) localAddrFor(hostPort string) string {
 	if len(p.localAddrMap) == 0 {
 		return p.localAddr
@@ -130,17 +152,42 @@ func (p *TCPProxy) localAddrFor(hostPort string) string {
 
 	// try port
 	host, port, _ := net.SplitHostPort(hostPort)
-	if addr := p.localAddrMap[port]; addr != "" {
-		return addr
+	if host == "" {
+		host = hostPort
 	}
+	if port != "" {
+		if addr := p.localAddrMap[port]; addr != "" {
+			return addr
+		}
 
-	// try 0.0.0.0:port
-	if addr := p.localAddrMap[fmt.Sprintf("0.0.0.0:%s", port)]; addr != "" {
-		return addr
+		// try 0.0.0.0:port
+		if addr := p.localAddrMap[fmt.Sprintf("0.0.0.0:%s", port)]; addr != "" {
+			return addr
+		}
 	}
 
 	// try host
 	if addr := p.localAddrMap[host]; addr != "" {
+		return addr
+	}
+
+	// try wildcard domain match (e.g. *.example.com)
+	if dot := strings.Index(host, "."); dot != -1 {
+		for dot != -1 {
+			wildcard := "*" + host[dot:]
+			if addr := p.localAddrMap[wildcard]; addr != "" {
+				return addr
+			}
+			nextDot := strings.Index(host[dot+1:], ".")
+			if nextDot == -1 {
+				break
+			}
+			dot += 1 + nextDot
+		}
+	}
+
+	// try "*"
+	if addr := p.localAddrMap["*"]; addr != "" {
 		return addr
 	}
 

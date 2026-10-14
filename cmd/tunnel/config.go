@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v2"
@@ -92,6 +93,10 @@ func loadClientConfigFromFile(file string) (*ClientConfig, error) {
 			if err := validateSNI(t); err != nil {
 				return nil, fmt.Errorf("%s %s", name, err)
 			}
+		case "proxy":
+			if err := validateProxy(t); err != nil {
+				return nil, fmt.Errorf("%s %s", name, err)
+			}
 		default:
 			return nil, fmt.Errorf("%s invalid protocol %q", name, t.Protocol)
 		}
@@ -105,11 +110,32 @@ func validateHTTP(t *Tunnel) error {
 	if t.Host == "" {
 		return fmt.Errorf("host: missing")
 	}
-	if t.Addr == "" {
+	if t.Addr != "" {
+		if t.Addr, err = normalizeURL(t.Addr); err != nil {
+			return fmt.Errorf("addr: %s", err)
+		}
+	} else if t.Host != "*" && !strings.HasPrefix(t.Host, "*.") {
 		return fmt.Errorf("addr: missing")
 	}
-	if t.Addr, err = normalizeURL(t.Addr); err != nil {
-		return fmt.Errorf("addr: %s", err)
+
+	// unexpected
+
+	if t.RemoteAddr != "" {
+		return fmt.Errorf("remote_addr: unexpected")
+	}
+
+	return nil
+}
+
+func validateProxy(t *Tunnel) error {
+	var err error
+	if t.Host == "" {
+		t.Host = "*"
+	}
+	if t.Addr != "" {
+		if t.Addr, err = normalizeURL(t.Addr); err != nil {
+			return fmt.Errorf("addr: %s", err)
+		}
 	}
 
 	// unexpected

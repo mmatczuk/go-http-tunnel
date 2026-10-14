@@ -7,6 +7,7 @@ package tunnel
 import (
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 
 	"github.com/mmatczuk/go-http-tunnel/id"
@@ -83,12 +84,34 @@ func (r *registry) Subscriber(hostPort string) (id.ID, *Auth, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	h, ok := r.hosts[trimPort(hostPort)]
-	if !ok {
-		return id.ID{}, nil, false
+	host := trimPort(hostPort)
+
+	// 1. Exact match
+	if h, ok := r.hosts[host]; ok {
+		return h.identifier, h.auth, true
 	}
 
-	return h.identifier, h.auth, ok
+	// 2. Wildcard domain match (e.g. *.example.com)
+	if dot := strings.Index(host, "."); dot != -1 {
+		for dot != -1 {
+			wildcard := "*" + host[dot:]
+			if h, ok := r.hosts[wildcard]; ok {
+				return h.identifier, h.auth, true
+			}
+			nextDot := strings.Index(host[dot+1:], ".")
+			if nextDot == -1 {
+				break
+			}
+			dot += 1 + nextDot
+		}
+	}
+
+	// 3. Fallback catch-all wildcard match
+	if h, ok := r.hosts["*"]; ok {
+		return h.identifier, h.auth, true
+	}
+
+	return id.ID{}, nil, false
 }
 
 // Unsubscribe removes client from registry and returns it's RegistryItem.
@@ -109,7 +132,7 @@ func (r *registry) Unsubscribe(identifier id.ID) *RegistryItem {
 
 	if i.Hosts != nil {
 		for _, h := range i.Hosts {
-			delete(r.hosts, h.Host)
+			delete(r.hosts, trimPort(h.Host))
 		}
 	}
 

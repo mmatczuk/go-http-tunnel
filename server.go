@@ -452,8 +452,12 @@ func (s *Server) addTunnels(tunnels map[string]*proto.Tunnel, identifier id.ID) 
 	var err error
 	for name, t := range tunnels {
 		switch t.Protocol {
-		case proto.HTTP:
-			i.Hosts = append(i.Hosts, &HostAuth{t.Host, NewAuth(t.Auth)})
+		case proto.HTTP, "proxy":
+			host := t.Host
+			if host == "" && t.Protocol == "proxy" {
+				host = "*"
+			}
+			i.Hosts = append(i.Hosts, &HostAuth{host, NewAuth(t.Auth)})
 		case proto.TCP, proto.TCP4, proto.TCP6, proto.UNIX:
 			var l net.Listener
 			l, err = net.Listen(t.Protocol, t.Addr)
@@ -638,12 +642,98 @@ func (s *Server) Upgrade(identifier id.ID, conn net.Conn, requestBytes []byte) e
 	return nil
 }
 
+type bufferedConn struct {
+	net.Conn
+	r io.Reader
+}
+
+func (c *bufferedConn) Read(b []byte) (int, error) {
+	return c.r.Read(b)
+}
+
+func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
+	identifier, auth, ok := s.Subscriber(r.Host)
+	if !ok {
+		s.logger.Log(
+			"level", 0,
+			"action", "connect failed: client not subscribed",
+			"addr", r.RemoteAddr,
+			"host", r.Host,
+		)
+		http.Error(w, errClientNotSubscribed.Error(), http.StatusBadGateway)
+		return
+	}
+
+	if auth != nil {
+		user, password, ok := r.BasicAuth()
+		if !ok {
+			user, password, ok = parseBasicAuth(r.Header.Get("Proxy-Authorization"))
+		}
+		if !ok || auth.User != user || auth.Password != password {
+			w.Header().Set("Proxy-Authenticate", "Basic realm=\"User Visible Realm\"")
+			http.Error(w, errUnauthorised.Error(), http.StatusProxyAuthRequired)
+			return
+		}
+	}
+
+	hijacker, ok := w.(http.Hijacker)
+	if !ok {
+		http.Error(w, "hijacking not supported", http.StatusInternalServerError)
+		return
+	}
+
+	conn, bufrw, err := hijacker.Hijack()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	defer conn.Close()
+
+	if _, err := bufrw.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n"); err != nil {
+		return
+	}
+	if err := bufrw.Flush(); err != nil {
+		return
+	}
+
+	var clientConn net.Conn = conn
+	if bufrw.Reader.Buffered() > 0 {
+		clientConn = &bufferedConn{Conn: conn, r: bufrw.Reader}
+	}
+
+	msg := &proto.ControlMessage{
+		Action:         proto.ActionProxy,
+		ForwardedHost:  r.Host,
+		ForwardedProto: proto.TCP,
+	}
+
+	if err := s.proxyConn(identifier, clientConn, msg); err != nil {
+		s.logger.Log(
+			"level", 0,
+			"msg", "proxy error",
+			"identifier", identifier,
+			"ctrlMsg", msg,
+			"err", err,
+		)
+	}
+}
+
 // ServeHTTP proxies http connection to the client.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodConnect {
+		s.handleConnect(w, r)
+		return
+	}
+
 	resp, err := s.RoundTrip(r)
 	if err == errUnauthorised {
 		w.Header().Set("WWW-Authenticate", "Basic realm=\"User Visible Realm\"")
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		w.Header().Set("Proxy-Authenticate", "Basic realm=\"User Visible Realm\"")
+		status := http.StatusUnauthorized
+		if r.Header.Get("Proxy-Authorization") != "" || r.URL.IsAbs() {
+			status = http.StatusProxyAuthRequired
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 	if err != nil {
@@ -685,11 +775,15 @@ func (s *Server) RoundTrip(r *http.Request) (*http.Response, error) {
 	outr.Header = cloneHeader(r.Header)
 
 	if auth != nil {
-		user, password, _ := r.BasicAuth()
-		if auth.User != user || auth.Password != password {
+		user, password, ok := r.BasicAuth()
+		if !ok {
+			user, password, ok = parseBasicAuth(r.Header.Get("Proxy-Authorization"))
+		}
+		if !ok || auth.User != user || auth.Password != password {
 			return nil, errUnauthorised
 		}
 		outr.Header.Del("Authorization")
+		outr.Header.Del("Proxy-Authorization")
 	}
 
 	setXForwardedFor(outr.Header, r.RemoteAddr)
@@ -853,11 +947,11 @@ func (s *Server) proxyHTTP(identifier id.ID, r *http.Request, msg *proto.Control
 	)
 
 	pr, pw := io.Pipe()
-	defer pr.Close()
-	defer pw.Close()
 
 	req, err := s.connectRequest(identifier, msg, pr)
 	if err != nil {
+		pr.Close()
+		pw.Close()
 		return nil, fmt.Errorf("proxy request error: %s", err)
 	}
 
@@ -872,6 +966,9 @@ func (s *Server) proxyHTTP(identifier id.ID, r *http.Request, msg *proto.Control
 				"ctrlMsg", msg,
 				"err", err,
 			)
+			pw.CloseWithError(err)
+		} else {
+			pw.Close()
 		}
 
 		s.logger.Log(
@@ -891,6 +988,7 @@ func (s *Server) proxyHTTP(identifier id.ID, r *http.Request, msg *proto.Control
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
+		pr.Close()
 		return nil, fmt.Errorf("io error: %s", err)
 	}
 
